@@ -34,7 +34,7 @@ func getUserInfo(ctx context.Context, name string) (_ *User,err error) {
   if !cb.Ready() {
     return nil, circuitbreaker.ErrOpened
   }
-  defer func() { err = b.Done(ctx, err) }
+  defer func() { err = cb.Done(ctx, err) }
 
   return fetchUserInfo(ctx, name)
 }
