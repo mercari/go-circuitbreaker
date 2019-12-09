@@ -75,7 +75,7 @@ func TestDo(t *testing.T) {
 	t.Run("markassuccess", func(t *testing.T) {
 		cb := circuitbreaker.New(&circuitbreaker.Options{})
 		wantErr := errors.New("something happens")
-		got, err := cb.Do(context.Background(), func() (interface{}, error) { return "data", circuitbreaker.MarkAsSucceeded(wantErr) })
+		got, err := cb.Do(context.Background(), func() (interface{}, error) { return "data", circuitbreaker.MarkAsSuccess(wantErr) })
 		assert.Equal(t, err, wantErr)
 		assert.Equal(t, "data", got.(string))
 		assert.Equal(t, int64(0), cb.Counters().Failures)
@@ -235,13 +235,13 @@ func TestIgnore(t *testing.T) {
 	})
 }
 
-func TestMarkAsSucceeded(t *testing.T) {
+func TestMarkAsSuccess(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
-		assert.Nil(t, circuitbreaker.MarkAsSucceeded(nil))
+		assert.Nil(t, circuitbreaker.MarkAsSuccess(nil))
 	})
-	t.Run("MarkAsSucceeded", func(t *testing.T) {
+	t.Run("MarkAsSuccess", func(t *testing.T) {
 		originalErr := errors.New("logic error")
-		err := circuitbreaker.MarkAsSucceeded(originalErr)
+		err := circuitbreaker.MarkAsSuccess(originalErr)
 		assert.Equal(t, err.Error(), "circuitbreaker mark this error as a success: logic error")
 		nfe, ok := err.(*circuitbreaker.SuccessMarkableError)
 		assert.True(t, ok)
