@@ -3,8 +3,8 @@
 go-circuitbreaker is a Circuit Breaker pattern implementation in Go.
 
 - Provides natural code flow.
-- Ignore errors occered by request cancellation from request callers (in default).
-- `Ignore(err)` and `MarkAsSucceess(err)` wrappers enable you to receive non-nil error from wrapped operations without counting it as a failure.
+- Ignore errors occurred by request cancellation from request callers (in default).
+- `Ignore(err)` and `MarkAsSuccess(err)` wrappers enable you to receive non-nil error from wrapped operations without counting it as a failure.
 
 # What is circuit breaker?
 
@@ -49,9 +49,9 @@ Your microservices' users are able to cancel your requests. The cancellation wil
 
 The same for timeouts configuration. Especially on gRPC, clients are able to set a timeout to the server's context. It means that clients with too short timeout are able to make other clients operation fail. For this issue, `go-circuitbreaker` provides an option to *an option to ignore deadline excceded errors* .
 
-## Ignore and MarkAsSucceess wrappers
+## Ignore and MarkAsSuccess wrappers
 
-Sometimes, we would like to receive an error from a protected operation but don't want to mark the request as a failure. For example, a case that protected HTTP request responded 404 NotFound. This application-level error is obviously not caused by a failure, so that we'd like to return nil error, but want to receive non-nil error. Because `go-circuitbreaker` is able to receive errors from protected operations without making them as failures, you don't need to write complicated error handligns in order to achieve your goal.
+Sometimes, we would like to receive an error from a protected operation but don't want to mark the request as a failure. For example, a case that protected HTTP request responded 404 NotFound. This application-level error is obviously not caused by a failure, so that we'd like to return nil error, but want to receive non-nil error. Because `go-circuitbreaker` is able to receive errors from protected operations without making them as failures, you don't need to write complicated error handlings in order to achieve your goal.
 
 ```go
 cb := circuitbreaker.New(nil)
