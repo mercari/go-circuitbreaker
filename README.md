@@ -1,5 +1,7 @@
 # go-circuitbreaker
 
+[![CircleCI](https://circleci.com/gh/mercari/go-circuitbreaker.svg?style=svg)](https://circleci.com/gh/mercari/go-circuitbreaker)
+
 go-circuitbreaker is a Circuit Breaker pattern implementation in Go.
 
 - Provides natural code flow.
