@@ -197,30 +197,6 @@ func TestCircuitBreakerTripFuncs(t *testing.T) {
 	})
 }
 
-func doAndAssertState(t *testing.T, cb *circuitbreaker.CircuitBreaker, f func(), wantState circuitbreaker.State, wantCounters *circuitbreaker.Counters) {
-	t.Helper()
-	if f != nil {
-		f()
-	}
-	assertState(t, cb, wantState, wantCounters)
-}
-
-func assertState(t *testing.T, cb *circuitbreaker.CircuitBreaker, wantState circuitbreaker.State, wantCounters *circuitbreaker.Counters) {
-	t.Helper()
-	assert.Equal(t, wantState, cb.State(), "unexpected cb.State()")
-	switch cb.State() {
-	case circuitbreaker.StateClosed:
-		assert.True(t, cb.Ready(), "If State is Closed, should ready")
-	case circuitbreaker.StateOpen:
-		assert.False(t, cb.Ready(), "If State is Open, should not ready")
-	case circuitbreaker.StateHalfOpen:
-		assert.True(t, cb.Ready(), "If State is Half, should ready")
-	}
-	if wantCounters != nil {
-		assert.Equal(t, *wantCounters, cb.Counters())
-	}
-}
-
 func TestIgnore(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
 		assert.Nil(t, circuitbreaker.Ignore(nil))
@@ -249,45 +225,68 @@ func TestMarkAsSuccess(t *testing.T) {
 	})
 }
 
+func TestSuccess(t *testing.T) {
+	cb := circuitbreaker.New(nil)
+	cb.Success()
+	assert.Equal(t, circuitbreaker.Counters{Successes: 1, Failures: 0, ConsecutiveSuccesses: 1, ConsecutiveFailures: 0}, cb.Counters())
+
+	// Test if Success resets ConsecutiveFailures.
+	cb.Fail()
+	cb.Success()
+	assert.Equal(t, circuitbreaker.Counters{Successes: 2, Failures: 1, ConsecutiveSuccesses: 1, ConsecutiveFailures: 0}, cb.Counters())
+
+}
+
+func TestFail(t *testing.T) {
+	cb := circuitbreaker.New(nil)
+	cb.Fail()
+	assert.Equal(t, circuitbreaker.Counters{Successes: 0, Failures: 1, ConsecutiveSuccesses: 0, ConsecutiveFailures: 1}, cb.Counters())
+
+	// Test if Fail resets ConsecutiveSuccesses.
+	cb.Success()
+	cb.Fail()
+	assert.Equal(t, circuitbreaker.Counters{Successes: 1, Failures: 2, ConsecutiveSuccesses: 0, ConsecutiveFailures: 1}, cb.Counters())
+}
+
+// TestReset tests if Reset resets all counters.
+func TestReset(t *testing.T) {
+	cb := circuitbreaker.New(nil)
+	cb.Success()
+	cb.Reset()
+	assert.Equal(t, circuitbreaker.Counters{}, cb.Counters())
+
+	cb.Fail()
+	cb.Reset()
+	assert.Equal(t, circuitbreaker.Counters{}, cb.Counters())
+}
+
 func TestReportFunctions(t *testing.T) {
-	t.Run("Success", func(t *testing.T) {
+	t.Run("Failed if ctx.Err() == nil", func(t *testing.T) {
 		cb := circuitbreaker.New(nil)
-		cb.Success()
-		assert.Equal(t, int64(0), cb.Counters().Failures)
-	})
-	t.Run("Fail", func(t *testing.T) {
-		cb := circuitbreaker.New(nil)
-		cb.Fail()
+		cb.FailWithContext(context.Background())
 		assert.Equal(t, int64(1), cb.Counters().Failures)
 	})
-	t.Run("FailWithContext", func(t *testing.T) {
-		t.Run("Failed if ctx.Err() == nil", func(t *testing.T) {
-			cb := circuitbreaker.New(nil)
-			cb.FailWithContext(context.Background())
-			assert.Equal(t, int64(1), cb.Counters().Failures)
-		})
-		t.Run("ctx.Err() == context.Canceled", func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
+	t.Run("ctx.Err() == context.Canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
 
-			cb := circuitbreaker.New(nil)
-			cb.FailWithContext(ctx)
-			assert.Equal(t, int64(0), cb.Counters().Failures)
+		cb := circuitbreaker.New(nil)
+		cb.FailWithContext(ctx)
+		assert.Equal(t, int64(0), cb.Counters().Failures)
 
-			cb = circuitbreaker.New(&circuitbreaker.Options{FailOnContextCancel: true})
-			cb.FailWithContext(ctx)
-			assert.Equal(t, int64(1), cb.Counters().Failures)
-		})
-		t.Run("ctx.Err() == context.DeadlineExceeded", func(t *testing.T) {
-			ctx, cancel := context.WithDeadline(context.Background(), time.Time{})
-			defer cancel()
-			cb := circuitbreaker.New(nil)
-			cb.FailWithContext(ctx)
-			assert.Equal(t, int64(0), cb.Counters().Failures)
+		cb = circuitbreaker.New(&circuitbreaker.Options{FailOnContextCancel: true})
+		cb.FailWithContext(ctx)
+		assert.Equal(t, int64(1), cb.Counters().Failures)
+	})
+	t.Run("ctx.Err() == context.DeadlineExceeded", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Time{})
+		defer cancel()
+		cb := circuitbreaker.New(nil)
+		cb.FailWithContext(ctx)
+		assert.Equal(t, int64(0), cb.Counters().Failures)
 
-			cb = circuitbreaker.New(&circuitbreaker.Options{FailOnContextDeadline: true})
-			cb.FailWithContext(ctx)
-			assert.Equal(t, int64(1), cb.Counters().Failures)
-		})
+		cb = circuitbreaker.New(&circuitbreaker.Options{FailOnContextDeadline: true})
+		cb.FailWithContext(ctx)
+		assert.Equal(t, int64(1), cb.Counters().Failures)
 	})
 }
