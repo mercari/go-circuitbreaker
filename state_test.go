@@ -11,189 +11,225 @@ import (
 )
 
 func TestCircuitBreakerStateTransitions(t *testing.T) {
-	t.Run("ConstantOpenTimeout", func(t *testing.T) {
-		clock := clock.NewMock()
-		cb := circuitbreaker.New(&circuitbreaker.Options{
-			ShouldTrip:           circuitbreaker.NewTripFuncThreshold(3),
-			Clock:                clock,
-			OpenTimeout:          1000 * time.Millisecond,
-			HalfOpenMaxSuccesses: 4,
-		})
-		assertState(t, cb, circuitbreaker.StateClosed, &circuitbreaker.Counters{})
-
-		// Scenario: 3 Fails. State changes to -> StateOpen.
-		doAndAssertState(t, cb, cb.Success, circuitbreaker.StateClosed, &circuitbreaker.Counters{Successes: 1, ConsecutiveSuccesses: 1})
-		doAndAssertState(t, cb, cb.Success, circuitbreaker.StateClosed, &circuitbreaker.Counters{Successes: 2, ConsecutiveSuccesses: 2})
-		doAndAssertState(t, cb, cb.Success, circuitbreaker.StateClosed, &circuitbreaker.Counters{Successes: 3, ConsecutiveSuccesses: 3})
-		doAndAssertState(t, cb, cb.Success, circuitbreaker.StateClosed, &circuitbreaker.Counters{Successes: 4, ConsecutiveSuccesses: 4})
-		doAndAssertState(t, cb, cb.Fail, circuitbreaker.StateClosed, &circuitbreaker.Counters{Successes: 4, Failures: 1, ConsecutiveFailures: 1})
-		doAndAssertState(t, cb, cb.Fail, circuitbreaker.StateClosed, &circuitbreaker.Counters{Successes: 4, Failures: 2, ConsecutiveFailures: 2})
-		doAndAssertState(t, cb, cb.Fail, circuitbreaker.StateOpen, &circuitbreaker.Counters{Successes: 4, Failures: 3, ConsecutiveFailures: 3})
-
-		// Scenario: After OpenTimeout exceeded. -> StateHalfOpen.
-		clock.Add(999 * time.Millisecond)
-		assertState(t, cb, circuitbreaker.StateOpen, &circuitbreaker.Counters{Successes: 4, Failures: 3, ConsecutiveFailures: 3}) // not yet.
-		clock.Add(1 * time.Millisecond)
-		assertState(t, cb, circuitbreaker.StateHalfOpen, &circuitbreaker.Counters{Failures: 3, ConsecutiveFailures: 3})
-
-		// Scenario: Hit Fail. State back to StateOpen.
-		doAndAssertState(t, cb, cb.Fail, circuitbreaker.StateOpen, &circuitbreaker.Counters{Failures: 4, ConsecutiveFailures: 4})
-
-		// Scenario: After OpenTimeout exceeded. -> StateHalfOpen. (again)
-		clock.Add(1000 * time.Millisecond)
-		assertState(t, cb, circuitbreaker.StateHalfOpen, &circuitbreaker.Counters{Failures: 4, ConsecutiveFailures: 4})
-
-		// Scenario: Hit Success. State -> StateClosed.
-		doAndAssertState(t, cb, cb.Success, circuitbreaker.StateHalfOpen, &circuitbreaker.Counters{Successes: 1, Failures: 4, ConsecutiveSuccesses: 1})
-		doAndAssertState(t, cb, cb.Success, circuitbreaker.StateHalfOpen, &circuitbreaker.Counters{Successes: 2, Failures: 4, ConsecutiveSuccesses: 2})
-		doAndAssertState(t, cb, cb.Success, circuitbreaker.StateHalfOpen, &circuitbreaker.Counters{Successes: 3, Failures: 4, ConsecutiveSuccesses: 3})
-		doAndAssertState(t, cb, cb.Success, circuitbreaker.StateClosed, &circuitbreaker.Counters{Successes: 4, Failures: 0, ConsecutiveSuccesses: 4})
+	clock := clock.NewMock()
+	cb := circuitbreaker.New(&circuitbreaker.Options{
+		ShouldTrip:           circuitbreaker.NewTripFuncThreshold(3),
+		Clock:                clock,
+		OpenTimeout:          1000 * time.Millisecond,
+		HalfOpenMaxSuccesses: 4,
 	})
 
-	t.Run("WithOpenBackOff", func(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		// Scenario: 3 Fails. State changes to -> StateOpen.
+		cb.Fail()
+		assert.Equal(t, circuitbreaker.StateClosed, cb.State())
+		cb.Fail()
+		assert.Equal(t, circuitbreaker.StateClosed, cb.State())
+		cb.Fail()
+		assert.Equal(t, circuitbreaker.StateOpen, cb.State())
+
+		// Scenario: After OpenTimeout exceeded. -> StateHalfOpen.
+		assertChangeStateToHalfOpenAfter(t, cb, clock, 1000*time.Millisecond)
+
+		// Scenario: Hit Fail. State back to StateOpen.
+		cb.Fail()
+		assert.Equal(t, circuitbreaker.StateOpen, cb.State())
+
+		// Scenario: After OpenTimeout exceeded. -> StateHalfOpen. (again)
+		assertChangeStateToHalfOpenAfter(t, cb, clock, 1000*time.Millisecond)
+
+		// Scenario: Hit Success. State -> StateClosed.
+		cb.Success()
+		assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
+		cb.Success()
+		assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
+		cb.Success()
+		assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
+		cb.Success()
+		assert.Equal(t, circuitbreaker.StateClosed, cb.State())
+	}
+}
+
+// TestStateClosed tests...
+// - Ready() always returns true.
+// - Change state if Failures threshold reached.
+// - Interval ticker reset the internal counter..
+func TestStateClosed(t *testing.T) {
+	clock := clock.NewMock()
+	cb := circuitbreaker.New(&circuitbreaker.Options{
+		ShouldTrip: circuitbreaker.NewTripFuncThreshold(3),
+		Clock:      clock,
+		Interval:   1000 * time.Millisecond,
+	})
+
+	t.Run("Ready", func(t *testing.T) {
+		assert.True(t, cb.Ready())
+	})
+
+	t.Run("open-if-shouldtrip-reached", func(t *testing.T) {
+		cb.Reset()
+		cb.Fail()
+		cb.Fail()
+		assert.Equal(t, circuitbreaker.StateClosed, cb.State())
+		cb.Fail()
+		assert.Equal(t, circuitbreaker.StateOpen, cb.State())
+	})
+
+	t.Run("ticker-reset-the-counter", func(t *testing.T) {
+		cb.Reset()
+		cb.Success()
+		cb.Fail()
+		clock.Add(999 * time.Millisecond)
+		assert.Equal(t, circuitbreaker.Counters{Successes: 1, Failures: 1, ConsecutiveFailures: 1}, cb.Counters())
+		clock.Add(1 * time.Millisecond)
+		assert.Equal(t, circuitbreaker.Counters{}, cb.Counters())
+	})
+}
+
+// TestStateOpen tests...
+// - Ready() always returns false.
+// - Change state to StateHalfOpen after timer.
+func TestStateOpen(t *testing.T) {
+	clk := clock.NewMock()
+	cb := circuitbreaker.New(&circuitbreaker.Options{
+		ShouldTrip:  circuitbreaker.NewTripFuncThreshold(3),
+		Clock:       clk,
+		OpenTimeout: 500 * time.Millisecond,
+	})
+	t.Run("Ready", func(t *testing.T) {
+		cb.SetState(circuitbreaker.StateOpen)
+		assert.False(t, cb.Ready())
+	})
+	t.Run("HalfOpen-when-timer-triggered", func(t *testing.T) {
+		cb.SetState(circuitbreaker.StateOpen)
+		cb.Fail()
+		cb.Success()
+
+		clk.Add(499 * time.Millisecond)
+		assert.Equal(t, circuitbreaker.StateOpen, cb.State())
+
+		clk.Add(1 * time.Millisecond)
+		assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
+		assert.Equal(t, circuitbreaker.Counters{Failures: 1}, cb.Counters()) // successes reset.
+	})
+	t.Run("HalfOpen-with-ExponentialOpenBackOff", func(t *testing.T) {
 		clock := clock.NewMock()
 		backoff := &backoff.ExponentialBackOff{
 			InitialInterval:     1000 * time.Millisecond,
 			RandomizationFactor: 0,
 			Multiplier:          2,
-			MaxInterval:         10 * time.Second,
+			MaxInterval:         5 * time.Second,
 			MaxElapsedTime:      0,
 			Clock:               clock,
 		}
-		backoff.Reset()
-
 		cb := circuitbreaker.New(&circuitbreaker.Options{
 			ShouldTrip:           circuitbreaker.NewTripFuncThreshold(1),
 			HalfOpenMaxSuccesses: 1,
 			Clock:                clock,
 			OpenBackOff:          backoff,
 		})
+		backoff.Reset()
 
-		assert := func(after time.Duration) {
-			t.Helper()
-
-			assertState(t, cb, circuitbreaker.StateOpen, nil)
-			clock.Add(after - 1)
-			assertState(t, cb, circuitbreaker.StateOpen, nil)
-			clock.Add(1)
-			assertState(t, cb, circuitbreaker.StateHalfOpen, nil)
+		tests := []struct {
+			f     func()
+			after time.Duration
+		}{
+			{f: cb.Fail, after: 1000 * time.Millisecond},
+			{f: cb.Fail, after: 2000 * time.Millisecond},
+			{f: cb.Fail, after: 4000 * time.Millisecond},
+			{f: cb.Fail, after: 5000 * time.Millisecond},
+			{f: func() { cb.Success(); cb.Fail() }, after: 1000 * time.Millisecond},
 		}
+		for _, test := range tests {
+			test.f()
+			assert.Equal(t, circuitbreaker.StateOpen, cb.State())
 
-		assertState(t, cb, circuitbreaker.StateClosed, nil)
+			clock.Add(test.after - 1)
+			assert.Equal(t, circuitbreaker.StateOpen, cb.State())
 
-		cb.Fail()
-		assert(1000 * time.Millisecond) // InitialInterval
+			clock.Add(1)
+			assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
+		}
+	})
+	t.Run("OpenBackOff", func(t *testing.T) {
+		clock := clock.NewMock()
+		backoff := &backoff.ExponentialBackOff{
+			InitialInterval:     1000 * time.Millisecond,
+			RandomizationFactor: 0,
+			Multiplier:          2,
+			MaxInterval:         5 * time.Second,
+			MaxElapsedTime:      0,
+			Clock:               clock,
+		}
+		cb := circuitbreaker.New(&circuitbreaker.Options{
+			ShouldTrip:           circuitbreaker.NewTripFuncThreshold(1),
+			HalfOpenMaxSuccesses: 1,
+			Clock:                clock,
+			OpenBackOff:          backoff,
+		})
+		backoff.Reset()
 
-		cb.Fail()
-		assert(2000 * time.Millisecond) // InitialInterval * Multiplier
-
-		cb.Fail()
-		assert(4000 * time.Millisecond) // InitialInterval * (Multiplier ^ 2)
-
-		cb.Fail()
-		assert(8000 * time.Millisecond) // InitialInterval * (Multiplier ^ 3)
-
-		cb.Fail()
-		assert(10000 * time.Millisecond) // capped by MaxInterval
-
-		// cb.Success Reset the backoff.
-		doAndAssertState(t, cb, cb.Success, circuitbreaker.StateClosed, nil)
-
-		cb.Fail()
-		assert(1000 * time.Millisecond) // capped by MaxInterval
+		tests := []struct {
+			f     func()
+			after time.Duration
+		}{
+			{f: cb.Fail, after: 1000 * time.Millisecond},
+			{f: cb.Fail, after: 2000 * time.Millisecond},
+			{f: cb.Fail, after: 4000 * time.Millisecond},
+			{f: cb.Fail, after: 5000 * time.Millisecond},
+			{f: func() { cb.Success(); cb.Fail() }, after: 1000 * time.Millisecond},
+		}
+		for _, test := range tests {
+			test.f()
+			assertChangeStateToHalfOpenAfter(t, cb, clock, test.after)
+		}
 	})
 }
 
-func TestCircuitBreakerState(t *testing.T) {
+func assertChangeStateToHalfOpenAfter(t *testing.T, cb *circuitbreaker.CircuitBreaker, clock *clock.Mock, after time.Duration) {
+	clock.Add(after - 1)
+	assert.Equal(t, circuitbreaker.StateOpen, cb.State())
+
+	clock.Add(1)
+	assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
+}
+
+// StateOpen Test
+// - Ready() always returns true.
+// - If get a fail, the state changes to Open.
+// - If get a success, the state changes to Closed.
+func TestHalfOpen(t *testing.T) {
 	clock := clock.NewMock()
 	cb := circuitbreaker.New(&circuitbreaker.Options{
 		ShouldTrip:           circuitbreaker.NewTripFuncThreshold(3),
 		Clock:                clock,
-		Interval:             1000 * time.Millisecond,
-		OpenTimeout:          500 * time.Millisecond,
 		HalfOpenMaxSuccesses: 4,
 	})
-
-	t.Run("StateClosed", func(t *testing.T) {
-		// StateClosed Test
-		// - Ready() always returns true.
-		// - Change state when Failure threshold reached.
-		// - Interval ticker reset the internal counter..
-
-		t.Run("ready()-returns-true", func(t *testing.T) {
-			cb.Reset()
-			assert.True(t, cb.Ready())
-		})
-
-		t.Run("change-state-when-failure-threshold-reached", func(t *testing.T) {
-			cb.Reset()
-			doAndAssertState(t, cb, cb.Fail, circuitbreaker.StateClosed, &circuitbreaker.Counters{Failures: 1, ConsecutiveFailures: 1}) // 1st fail.
-			doAndAssertState(t, cb, cb.Fail, circuitbreaker.StateClosed, &circuitbreaker.Counters{Failures: 2, ConsecutiveFailures: 2}) // 2nc fail.
-
-			// successes does not change the state...
-			for i := int64(1); i <= 10; i++ {
-				doAndAssertState(t, cb, cb.Success, circuitbreaker.StateClosed, &circuitbreaker.Counters{Successes: i, Failures: 2, ConsecutiveSuccesses: i}) // 1st fail.
-			}
-			// 3rd fail. should change the state to Open.
-			doAndAssertState(t, cb, cb.Fail, circuitbreaker.StateOpen, &circuitbreaker.Counters{Successes: 10, Failures: 3, ConsecutiveFailures: 1})
-		})
-
-		t.Run("ticker-reset-the-counter", func(t *testing.T) {
-			cb.Reset()
-			doAndAssertState(t, cb, cb.Fail, circuitbreaker.StateClosed, &circuitbreaker.Counters{Failures: 1, ConsecutiveFailures: 1})
-			doAndAssertState(t, cb, cb.Fail, circuitbreaker.StateClosed, &circuitbreaker.Counters{Failures: 2, ConsecutiveFailures: 2})
-			clock.Add(1200 * time.Millisecond)
-			assertState(t, cb, circuitbreaker.StateClosed, &circuitbreaker.Counters{}) // failures is reset after the interval.
-		})
+	t.Run("Ready", func(t *testing.T) {
+		cb.Reset()
+		cb.SetState(circuitbreaker.StateHalfOpen)
+		assert.True(t, cb.Ready())
 	})
+	t.Run("Open-if-got-a-fail", func(t *testing.T) {
+		cb.Reset()
+		cb.SetState(circuitbreaker.StateHalfOpen)
 
-	t.Run("StateOpen", func(t *testing.T) {
-		// StateOpen Test
-		// - Ready() always returns false.
-		// - Change state to StateHalfOpen after timer.
-
-		t.Run("ready()-returns-false", func(t *testing.T) {
-			cb.SetState(circuitbreaker.StateOpen)
-			assert.False(t, cb.Ready())
-		})
-		t.Run("change-state-when-timer-triggered", func(t *testing.T) {
-			cb.SetState(circuitbreaker.StateOpen)
-			clock.Add(499 * time.Millisecond)
-			// Successes / Failures does not affect the internal state...
-			for i := int64(1); i <= 10; i++ {
-				doAndAssertState(t, cb, cb.Success, circuitbreaker.StateOpen, &circuitbreaker.Counters{Successes: i, ConsecutiveSuccesses: i})
-			}
-			for i := int64(1); i <= 10; i++ {
-				doAndAssertState(t, cb, cb.Fail, circuitbreaker.StateOpen, &circuitbreaker.Counters{Successes: 10, Failures: i, ConsecutiveFailures: i})
-			}
-			clock.Add(1 * time.Millisecond)
-			assertState(t, cb, circuitbreaker.StateHalfOpen, &circuitbreaker.Counters{Successes: 0, Failures: 10, ConsecutiveFailures: 10})
-		})
+		cb.Fail()
+		assert.Equal(t, circuitbreaker.StateOpen, cb.State())
+		assert.Equal(t, circuitbreaker.Counters{Failures: 1, ConsecutiveFailures: 1}, cb.Counters()) // no reset
 	})
+	t.Run("Close-if-success-reaches-HalfOpenMaxSuccesses", func(t *testing.T) {
+		cb.Reset()
+		cb.Fail()
+		cb.SetState(circuitbreaker.StateHalfOpen)
 
-	t.Run("StateHalfOpen", func(t *testing.T) {
-		// StateOpen Test
-		// - Ready() always returns true.
-		// - If get a fail, the state changes to Open.
-		// - If get a success, the state changes to Closed.
+		cb.Success()
+		cb.Success()
+		cb.Success()
+		assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
 
-		t.Run("ready()-returns-true", func(t *testing.T) {
-			cb.Reset()
-			cb.SetState(circuitbreaker.StateHalfOpen)
-			assert.True(t, cb.Ready())
-		})
-		t.Run("change-state-to-StateOpen-if-got-a-fail", func(t *testing.T) {
-			cb.Reset()
-			cb.SetState(circuitbreaker.StateHalfOpen)
-			doAndAssertState(t, cb, cb.Fail, circuitbreaker.StateOpen, &circuitbreaker.Counters{Failures: 1, ConsecutiveFailures: 1})
-		})
-		t.Run("change-state-to-StateClosed-if-got-a-success", func(t *testing.T) {
-			cb.Reset()
-			cb.SetState(circuitbreaker.StateHalfOpen)
-			doAndAssertState(t, cb, cb.Success, circuitbreaker.StateHalfOpen, &circuitbreaker.Counters{Successes: 1, ConsecutiveSuccesses: 1})
-			doAndAssertState(t, cb, cb.Success, circuitbreaker.StateHalfOpen, &circuitbreaker.Counters{Successes: 2, ConsecutiveSuccesses: 2})
-			doAndAssertState(t, cb, cb.Success, circuitbreaker.StateHalfOpen, &circuitbreaker.Counters{Successes: 3, ConsecutiveSuccesses: 3})
-			doAndAssertState(t, cb, cb.Success, circuitbreaker.StateClosed, &circuitbreaker.Counters{Successes: 4, ConsecutiveSuccesses: 4})
-		})
+		cb.Success()
+		assert.Equal(t, circuitbreaker.StateClosed, cb.State())
+		assert.Equal(t, circuitbreaker.Counters{Successes: 4, Failures: 0, ConsecutiveSuccesses: 4}, cb.Counters()) // Failures reset.
 	})
 }
