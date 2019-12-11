@@ -195,6 +195,20 @@ func TestCircuitBreakerTripFuncs(t *testing.T) {
 		assert.True(t, shouldTrip(&circuitbreaker.Counters{Failures: 5}))
 		assert.True(t, shouldTrip(&circuitbreaker.Counters{Failures: 6}))
 	})
+	t.Run("TripFuncConsecutiveFailures", func(t *testing.T) {
+		shouldTrip := circuitbreaker.NewTripFuncConsecutiveFailures(5)
+		assert.False(t, shouldTrip(&circuitbreaker.Counters{ConsecutiveFailures: 4}))
+		assert.True(t, shouldTrip(&circuitbreaker.Counters{ConsecutiveFailures: 5}))
+		assert.True(t, shouldTrip(&circuitbreaker.Counters{ConsecutiveFailures: 6}))
+	})
+	t.Run("TripFuncFailureRate", func(t *testing.T) {
+		shouldTrip := circuitbreaker.NewTripFuncFailureRate(10, 0.4)
+		assert.False(t, shouldTrip(&circuitbreaker.Counters{Successes: 1, Failures: 8}))
+		assert.True(t, shouldTrip(&circuitbreaker.Counters{Successes: 1, Failures: 9}))
+		assert.False(t, shouldTrip(&circuitbreaker.Counters{Successes: 60, Failures: 39}))
+		assert.True(t, shouldTrip(&circuitbreaker.Counters{Successes: 60, Failures: 40}))
+		assert.True(t, shouldTrip(&circuitbreaker.Counters{Successes: 60, Failures: 41}))
+	})
 }
 
 func TestIgnore(t *testing.T) {

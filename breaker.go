@@ -76,17 +76,33 @@ func (c *Counters) incrementFailures() {
 	c.ConsecutiveSuccesses = 0
 }
 
-// TripFunc is a function to determine if CircuitBreaker should open
-// (trip) or not. TripFunc is called when cb.Fail was called and the
-// state was StateClosed. If TripFunc returns true, the cb's state goes
-// to StateOpen.
+// TripFunc is a function to determine if CircuitBreaker should open (trip) or
+// not. TripFunc is called when cb.Fail was called and the state was
+// StateClosed. If TripFunc returns true, the cb's state goes to StateOpen.
 type TripFunc func(*Counters) bool
 
-// NewTripFuncThreshold is the most ordinary TripFunc. It returns true
-// if the Failures counter is larger than or equals to threshold. The
-// counter is reset periodically.
+// NewTripFuncThreshold provides a TripFunc. It returns true if the
+// Failures counter is larger than or equals to threshold.
 func NewTripFuncThreshold(threshold int64) TripFunc {
 	return func(cnt *Counters) bool { return cnt.Failures >= threshold }
+}
+
+// NewTripFuncConsecutiveFailures provides a TripFunc that returns true
+// if the consecutive failures is larger than or equals to threshold.
+func NewTripFuncConsecutiveFailures(threshold int64) TripFunc {
+	return func(cnt *Counters) bool { return cnt.ConsecutiveFailures >= threshold }
+}
+
+// NewTripFuncFailureRate provides a TripFunc that returns true if the failure
+// rate is higher or equals to rate. If the samples are fewer than min, always
+// returns false.
+func NewTripFuncFailureRate(min int64, rate float64) TripFunc {
+	return func(cnt *Counters) bool {
+		if cnt.Successes+cnt.Failures < min {
+			return false
+		}
+		return float64(cnt.Failures)/float64(cnt.Successes+cnt.Failures) >= rate
+	}
 }
 
 // IgnorableError signals that the operation should not be marked as a failure.
