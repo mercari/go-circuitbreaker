@@ -211,50 +211,101 @@ type CircuitBreaker struct {
 	cnt   Counters
 }
 
+type fnApplyOptions func(*Options)
+
+// Breaker option interface for applying configuration in the constructor
+type BreakerOption interface {
+	apply(*Options)
+}
+
+func (f fnApplyOptions) apply(options *Options) {
+	f(options)
+}
+
+// Set the function for counter
+func WithShouldTrip(tripFunc TripFunc) BreakerOption {
+	return fnApplyOptions(func(options *Options) {
+		options.ShouldTrip = tripFunc
+	})
+}
+
+// Set the clock
+func WithClock(clock clock.Clock) BreakerOption {
+	return fnApplyOptions(func(options *Options) {
+		options.Clock = clock
+	})
+}
+
+// Set the time backoff
+func WithBackOff(backoff backoff.BackOff) BreakerOption {
+	return fnApplyOptions(func(options *Options) {
+		options.OpenBackOff = backoff
+	})
+}
+
+// Set the timeout of the circuit breaker
+func WithTimeout(timeout time.Duration) BreakerOption {
+	return fnApplyOptions(func(options *Options) {
+		options.OpenTimeout = timeout
+	})
+}
+
+// Set the number of half open successes
+func WithHalfOpenMaxSuccesses(maxSuccesses int64) BreakerOption {
+	return fnApplyOptions(func(options *Options) {
+		options.HalfOpenMaxSuccesses = maxSuccesses
+	})
+}
+
+// Set the interval of the circuit breaker
+func WithInterval(interval time.Duration) BreakerOption {
+	return fnApplyOptions(func(options *Options) {
+		options.Interval = interval
+	})
+}
+
+// Set if the context should fail on cancel
+func WithFailOnContextCancel(failOnContextCancel bool) BreakerOption {
+	return fnApplyOptions(func(options *Options) {
+		options.FailOnContextCancel = failOnContextCancel
+	})
+}
+
+// Set if the context should fail on deadline
+func WithFailOnContextDeadline(failOnContextDeadline bool) BreakerOption {
+	return fnApplyOptions(func(options *Options) {
+		options.FailOnContextDeadline = failOnContextDeadline
+	})
+}
+
+func defaultOptions() *Options {
+	return &Options{
+		ShouldTrip:           DefaultTripFunc,
+		Clock:                clock.New(),
+		OpenBackOff:          DefaultOpenBackOff(),
+		OpenTimeout:          0,
+		HalfOpenMaxSuccesses: DefaultHalfOpenMaxSuccesses,
+		Interval:             DefaultInterval,
+	}
+}
+
 // New returns a new CircuitBreaker with *Options. If opts is nil, default
 // configurations are used.
-func New(opts *Options) *CircuitBreaker {
-	if opts == nil {
-		opts = &Options{}
-	}
+func New(opts ...BreakerOption) *CircuitBreaker {
+	cbOptions := defaultOptions()
 
-	shouldTrip := opts.ShouldTrip
-	if opts.ShouldTrip == nil {
-		shouldTrip = DefaultTripFunc
-	}
-
-	_clock := opts.Clock
-	if _clock == nil {
-		_clock = clock.New()
-	}
-
-	openBackOff := opts.OpenBackOff
-	if openBackOff == nil {
-		if opts.OpenTimeout > 0 {
-			openBackOff = backoff.NewConstantBackOff(opts.OpenTimeout)
-		} else {
-			openBackOff = DefaultOpenBackOff()
-		}
-	}
-
-	halfOpenMaxSuccesses := opts.HalfOpenMaxSuccesses
-	if halfOpenMaxSuccesses == 0 {
-		halfOpenMaxSuccesses = DefaultHalfOpenMaxSuccesses
-	}
-
-	interval := opts.Interval
-	if interval == 0 {
-		interval = DefaultInterval
+	for _, opt := range opts {
+		opt.apply(cbOptions)
 	}
 
 	cb := &CircuitBreaker{
-		shouldTrip:            shouldTrip,
-		clock:                 _clock,
-		interval:              opts.Interval,
-		openBackOff:           openBackOff,
-		halfOpenMaxSuccesses:  halfOpenMaxSuccesses,
-		failOnContextCancel:   opts.FailOnContextCancel,
-		failOnContextDeadline: opts.FailOnContextDeadline,
+		shouldTrip:            cbOptions.ShouldTrip,
+		clock:                 cbOptions.Clock,
+		interval:              cbOptions.Interval,
+		openBackOff:           cbOptions.OpenBackOff,
+		halfOpenMaxSuccesses:  cbOptions.HalfOpenMaxSuccesses,
+		failOnContextCancel:   cbOptions.FailOnContextCancel,
+		failOnContextDeadline: cbOptions.FailOnContextDeadline,
 	}
 	cb.setState(&stateClosed{})
 	return cb
