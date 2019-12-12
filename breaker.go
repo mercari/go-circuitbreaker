@@ -372,7 +372,9 @@ func (cb *CircuitBreaker) Counters() Counters {
 
 // Reset resets cb's state with StateClosed.
 func (cb *CircuitBreaker) Reset() {
+	cb.mu.Lock()
 	cb.cnt.reset()
+	cb.mu.Unlock()
 	cb.SetState(StateClosed)
 }
 

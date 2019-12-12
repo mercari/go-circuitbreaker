@@ -1,6 +1,9 @@
 package circuitbreaker_test
 
 import (
+	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -231,5 +234,59 @@ func TestHalfOpen(t *testing.T) {
 		cb.Success()
 		assert.Equal(t, circuitbreaker.StateClosed, cb.State())
 		assert.Equal(t, circuitbreaker.Counters{Successes: 4, Failures: 0, ConsecutiveSuccesses: 4}, cb.Counters()) // Failures reset.
+	})
+}
+
+func run(wg *sync.WaitGroup, f func()) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		f()
+	}()
+}
+
+func TestRace(t *testing.T) {
+	clock := clock.NewMock()
+	cb := circuitbreaker.New(&circuitbreaker.Options{
+		ShouldTrip: func(_ *circuitbreaker.Counters) bool { return true },
+		Clock:      clock,
+		Interval:   1000 * time.Millisecond,
+	})
+	t.Run("Race", func(t *testing.T) {
+		cb.Reset()
+		wg := &sync.WaitGroup{}
+		run(wg, func() {
+			cb.SetState(circuitbreaker.StateClosed)
+		})
+		run(wg, func() {
+			cb.Reset()
+		})
+		run(wg, func() {
+			cb.Done(context.Background(), errors.New(""))
+		})
+		run(wg, func() {
+			cb.Do(context.Background(), func() (interface{}, error) {
+				return nil, nil
+			})
+		})
+		run(wg, func() {
+			cb.State()
+		})
+		run(wg, func() {
+			cb.Fail()
+		})
+		run(wg, func() {
+			cb.Counters()
+		})
+		run(wg, func() {
+			cb.Ready()
+		})
+		run(wg, func() {
+			cb.Success()
+		})
+		run(wg, func() {
+			cb.FailWithContext(context.Background())
+		})
+		wg.Wait()
 	})
 }
