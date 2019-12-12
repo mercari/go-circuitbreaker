@@ -298,6 +298,10 @@ func New(opts ...BreakerOption) *CircuitBreaker {
 		opt.apply(cbOptions)
 	}
 
+	if cbOptions.OpenTimeout > 0 {
+		cbOptions.OpenBackOff = backoff.NewConstantBackOff(cbOptions.OpenTimeout)
+	}
+
 	cb := &CircuitBreaker{
 		shouldTrip:            cbOptions.ShouldTrip,
 		clock:                 cbOptions.Clock,

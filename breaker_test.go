@@ -234,7 +234,7 @@ func TestMarkAsSuccess(t *testing.T) {
 }
 
 func TestSuccess(t *testing.T) {
-	cb := circuitbreaker.New(nil)
+	cb := circuitbreaker.New()
 	cb.Success()
 	assert.Equal(t, circuitbreaker.Counters{Successes: 1, Failures: 0, ConsecutiveSuccesses: 1, ConsecutiveFailures: 0}, cb.Counters())
 
@@ -246,7 +246,7 @@ func TestSuccess(t *testing.T) {
 }
 
 func TestFail(t *testing.T) {
-	cb := circuitbreaker.New(nil)
+	cb := circuitbreaker.New()
 	cb.Fail()
 	assert.Equal(t, circuitbreaker.Counters{Successes: 0, Failures: 1, ConsecutiveSuccesses: 0, ConsecutiveFailures: 1}, cb.Counters())
 
@@ -258,7 +258,7 @@ func TestFail(t *testing.T) {
 
 // TestReset tests if Reset resets all counters.
 func TestReset(t *testing.T) {
-	cb := circuitbreaker.New(nil)
+	cb := circuitbreaker.New()
 	cb.Success()
 	cb.Reset()
 	assert.Equal(t, circuitbreaker.Counters{}, cb.Counters())
@@ -270,7 +270,7 @@ func TestReset(t *testing.T) {
 
 func TestReportFunctions(t *testing.T) {
 	t.Run("Failed if ctx.Err() == nil", func(t *testing.T) {
-		cb := circuitbreaker.New(nil)
+		cb := circuitbreaker.New()
 		cb.FailWithContext(context.Background())
 		assert.Equal(t, int64(1), cb.Counters().Failures)
 	})
@@ -278,7 +278,7 @@ func TestReportFunctions(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		cb := circuitbreaker.New(nil)
+		cb := circuitbreaker.New()
 		cb.FailWithContext(ctx)
 		assert.Equal(t, int64(0), cb.Counters().Failures)
 
@@ -289,7 +289,7 @@ func TestReportFunctions(t *testing.T) {
 	t.Run("ctx.Err() == context.DeadlineExceeded", func(t *testing.T) {
 		ctx, cancel := context.WithDeadline(context.Background(), time.Time{})
 		defer cancel()
-		cb := circuitbreaker.New(nil)
+		cb := circuitbreaker.New()
 		cb.FailWithContext(ctx)
 		assert.Equal(t, int64(0), cb.Counters().Failures)
 
