@@ -13,12 +13,49 @@ go-circuitbreaker is a Circuit Breaker pattern implementation in Go.
 
 See: [Circuit Breaker pattern \- Cloud Design Patterns \| Microsoft Docs](https://docs.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker)
 
+## Initializing the circuit breaker
+
+This library is using the [functional options pattern]() to instance a new circuit breaker. The functions are the following:
+
+```go
+// Set the function for counter
+WithShouldTrip(tripFunc TripFunc)
+
+// Set the clock
+WithClock(clock clock.Clock)
+
+// Set the time backoff
+WithBackOff(backoff backoff.BackOff) 
+
+// Set the timeout of the circuit breaker
+WithTimeout(timeout time.Duration)
+
+// Set the number of half open successes
+WithHalfOpenMaxSuccesses(maxSuccesses int64)
+
+// Set the interval of the circuit breaker
+WithInterval(interval time.Duration)
+
+// Set if the context should fail on cancel
+WithFailOnContextCancel(failOnContextCancel bool) 
+
+// Set if the context should fail on deadline
+WithFailOnContextDeadline(failOnContextDeadline bool)
+```
+
+You can use them like the next example:
+
+```go
+var cb = circuitbreaker.New(circuitbreaker.WithInterval(1000*time.Milliseconds), 
+                            circuitbreaker.WithHalfOpenMaxSuccesses(4))
+```
+
 ## Simple Examples with Do.
 
 Wrapping your code block with `Do()` protects your process with Circuit Breaker.
 
 ```go
-var cb = circuitbreaker.New(nil)
+var cb = circuitbreaker.New()
 
 u, err := cb.Do(ctx, func() (interface{}, error) {
   return fetchUserInfo(name)
@@ -31,7 +68,7 @@ user, _ := u.(*User) // Casting interface{} into *User safely.
 The following example using Ready() and Done() is exactly equals to the above one. Since this style enables you to protect your processes without wrapping it and using type-unsafe interface{}, it would make it easy to implement CB to your existing logic.
 
 ```go
-var cb = circuitbreaker.New(nil)
+var cb = circuitbreaker.New()
 
 func getUserInfo(ctx context.Context, name string) (_ *User,err error) {
   if !cb.Ready() {
