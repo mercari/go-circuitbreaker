@@ -15,7 +15,7 @@ See: [Circuit Breaker pattern \- Cloud Design Patterns \| Microsoft Docs](https:
 
 ## Initializing the circuit breaker
 
-This library is using the [functional options pattern]() to instance a new circuit breaker. The functions are the following:
+This library is using the [functional options pattern](https://github.com/uber-go/guide/blob/master/style.md#functional-options) to instance a new circuit breaker. The functions are the following:
 
 ```go
 // Set the function for counter
