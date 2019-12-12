@@ -252,41 +252,38 @@ func TestRace(t *testing.T) {
 		Clock:      clock,
 		Interval:   1000 * time.Millisecond,
 	})
-	t.Run("Race", func(t *testing.T) {
-		cb.Reset()
-		wg := &sync.WaitGroup{}
-		run(wg, func() {
-			cb.SetState(circuitbreaker.StateClosed)
-		})
-		run(wg, func() {
-			cb.Reset()
-		})
-		run(wg, func() {
-			cb.Done(context.Background(), errors.New(""))
-		})
-		run(wg, func() {
-			cb.Do(context.Background(), func() (interface{}, error) {
-				return nil, nil
-			})
-		})
-		run(wg, func() {
-			cb.State()
-		})
-		run(wg, func() {
-			cb.Fail()
-		})
-		run(wg, func() {
-			cb.Counters()
-		})
-		run(wg, func() {
-			cb.Ready()
-		})
-		run(wg, func() {
-			cb.Success()
-		})
-		run(wg, func() {
-			cb.FailWithContext(context.Background())
-		})
-		wg.Wait()
+	wg := &sync.WaitGroup{}
+	run(wg, func() {
+		cb.SetState(circuitbreaker.StateClosed)
 	})
+	run(wg, func() {
+		cb.Reset()
+	})
+	run(wg, func() {
+		cb.Done(context.Background(), errors.New(""))
+	})
+	run(wg, func() {
+		cb.Do(context.Background(), func() (interface{}, error) {
+			return nil, nil
+		})
+	})
+	run(wg, func() {
+		cb.State()
+	})
+	run(wg, func() {
+		cb.Fail()
+	})
+	run(wg, func() {
+		cb.Counters()
+	})
+	run(wg, func() {
+		cb.Ready()
+	})
+	run(wg, func() {
+		cb.Success()
+	})
+	run(wg, func() {
+		cb.FailWithContext(context.Background())
+	})
+	wg.Wait()
 }
