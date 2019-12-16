@@ -19,22 +19,22 @@ This library is using the [functional options pattern](https://github.com/uber-g
 
 ```go
 // Set the function for counter
-WithShouldTrip(tripFunc TripFunc)
+WithTripFunc(tripFunc TripFunc)
 
 // Set the clock
 WithClock(clock clock.Clock)
 
 // Set the time backoff
-WithBackOff(backoff backoff.BackOff) 
+WithOpenTimeoutBackOff(backoff backoff.BackOff) 
 
 // Set the timeout of the circuit breaker
-WithTimeout(timeout time.Duration)
+WithOpenTimeout(timeout time.Duration)
 
 // Set the number of half open successes
 WithHalfOpenMaxSuccesses(maxSuccesses int64)
 
 // Set the interval of the circuit breaker
-WithInterval(interval time.Duration)
+WithCounterResetInterval(interval time.Duration)
 
 // Set if the context should fail on cancel
 WithFailOnContextCancel(failOnContextCancel bool) 
@@ -46,7 +46,7 @@ WithFailOnContextDeadline(failOnContextDeadline bool)
 You can use them like the next example:
 
 ```go
-var cb = circuitbreaker.New(circuitbreaker.WithInterval(1000*time.Milliseconds), 
+var cb = circuitbreaker.New(circuitbreaker.WithCounterResetInterval(1000*time.Milliseconds), 
                             circuitbreaker.WithHalfOpenMaxSuccesses(4))
 ```
 

@@ -12,9 +12,9 @@ import (
 
 func TestCircuitBreakerStateTransitions(t *testing.T) {
 	clk := clock.NewMock()
-	cb := circuitbreaker.New(circuitbreaker.WithShouldTrip(circuitbreaker.NewTripFuncThreshold(3)),
+	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 		circuitbreaker.WithClock(clk),
-		circuitbreaker.WithTimeout(1000*time.Millisecond),
+		circuitbreaker.WithOpenTimeout(1000*time.Millisecond),
 		circuitbreaker.WithHalfOpenMaxSuccesses(4))
 
 	for i := 0; i < 10; i++ {
@@ -54,9 +54,9 @@ func TestCircuitBreakerStateTransitions(t *testing.T) {
 // - Interval ticker reset the internal counter..
 func TestStateClosed(t *testing.T) {
 	clk := clock.NewMock()
-	cb := circuitbreaker.New(circuitbreaker.WithShouldTrip(circuitbreaker.NewTripFuncThreshold(3)),
+	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 		circuitbreaker.WithClock(clk),
-		circuitbreaker.WithInterval(1000*time.Millisecond))
+		circuitbreaker.WithCounterResetInterval(1000*time.Millisecond))
 
 	t.Run("Ready", func(t *testing.T) {
 		assert.True(t, cb.Ready())
@@ -87,9 +87,9 @@ func TestStateClosed(t *testing.T) {
 // - Change state to StateHalfOpen after timer.
 func TestStateOpen(t *testing.T) {
 	clk := clock.NewMock()
-	cb := circuitbreaker.New(circuitbreaker.WithShouldTrip(circuitbreaker.NewTripFuncThreshold(3)),
+	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 		circuitbreaker.WithClock(clk),
-		circuitbreaker.WithTimeout(500*time.Millisecond))
+		circuitbreaker.WithOpenTimeout(500*time.Millisecond))
 	t.Run("Ready", func(t *testing.T) {
 		cb.SetState(circuitbreaker.StateOpen)
 		assert.False(t, cb.Ready())
@@ -116,10 +116,10 @@ func TestStateOpen(t *testing.T) {
 			MaxElapsedTime:      0,
 			Clock:               clkMock,
 		}
-		cb := circuitbreaker.New(circuitbreaker.WithShouldTrip(circuitbreaker.NewTripFuncThreshold(1)),
+		cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(1)),
 			circuitbreaker.WithHalfOpenMaxSuccesses(1),
 			circuitbreaker.WithClock(clkMock),
-			circuitbreaker.WithBackOff(backoffTest))
+			circuitbreaker.WithOpenTimeoutBackOff(backoffTest))
 		backoffTest.Reset()
 
 		tests := []struct {
@@ -153,10 +153,10 @@ func TestStateOpen(t *testing.T) {
 			MaxElapsedTime:      0,
 			Clock:               clkMock,
 		}
-		cb := circuitbreaker.New(circuitbreaker.WithShouldTrip(circuitbreaker.NewTripFuncThreshold(1)),
+		cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(1)),
 			circuitbreaker.WithHalfOpenMaxSuccesses(1),
 			circuitbreaker.WithClock(clkMock),
-			circuitbreaker.WithBackOff(backoffTest))
+			circuitbreaker.WithOpenTimeoutBackOff(backoffTest))
 		backoffTest.Reset()
 
 		tests := []struct {
@@ -190,7 +190,7 @@ func assertChangeStateToHalfOpenAfter(t *testing.T, cb *circuitbreaker.CircuitBr
 // - If get a success, the state changes to Closed.
 func TestHalfOpen(t *testing.T) {
 	clkMock := clock.NewMock()
-	cb := circuitbreaker.New(circuitbreaker.WithShouldTrip(circuitbreaker.NewTripFuncThreshold(3)),
+	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 		circuitbreaker.WithClock(clkMock),
 		circuitbreaker.WithHalfOpenMaxSuccesses(4))
 	t.Run("Ready", func(t *testing.T) {

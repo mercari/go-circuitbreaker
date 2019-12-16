@@ -223,7 +223,7 @@ func (f fnApplyOptions) apply(options *Options) {
 }
 
 // Set the function for counter
-func WithShouldTrip(tripFunc TripFunc) BreakerOption {
+func WithTripFunc(tripFunc TripFunc) BreakerOption {
 	return fnApplyOptions(func(options *Options) {
 		options.ShouldTrip = tripFunc
 	})
@@ -237,14 +237,14 @@ func WithClock(clock clock.Clock) BreakerOption {
 }
 
 // Set the time backoff
-func WithBackOff(backoff backoff.BackOff) BreakerOption {
+func WithOpenTimeoutBackOff(backoff backoff.BackOff) BreakerOption {
 	return fnApplyOptions(func(options *Options) {
 		options.OpenBackOff = backoff
 	})
 }
 
 // Set the timeout of the circuit breaker
-func WithTimeout(timeout time.Duration) BreakerOption {
+func WithOpenTimeout(timeout time.Duration) BreakerOption {
 	return fnApplyOptions(func(options *Options) {
 		options.OpenTimeout = timeout
 	})
@@ -258,7 +258,7 @@ func WithHalfOpenMaxSuccesses(maxSuccesses int64) BreakerOption {
 }
 
 // Set the interval of the circuit breaker
-func WithInterval(interval time.Duration) BreakerOption {
+func WithCounterResetInterval(interval time.Duration) BreakerOption {
 	return fnApplyOptions(func(options *Options) {
 		options.Interval = interval
 	})

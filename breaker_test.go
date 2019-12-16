@@ -133,9 +133,9 @@ func TestDo(t *testing.T) {
 
 	t.Run("cyclic-state-transition", func(t *testing.T) {
 		clkMock := clock.NewMock()
-		cb := circuitbreaker.New(circuitbreaker.WithShouldTrip(circuitbreaker.NewTripFuncThreshold(3)),
+		cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 			circuitbreaker.WithClock(clkMock),
-			circuitbreaker.WithTimeout(1000*time.Millisecond),
+			circuitbreaker.WithOpenTimeout(1000*time.Millisecond),
 			circuitbreaker.WithHalfOpenMaxSuccesses(4))
 
 		wantErr := errors.New("something happens")
