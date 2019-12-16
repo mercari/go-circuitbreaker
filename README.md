@@ -46,8 +46,18 @@ WithFailOnContextDeadline(failOnContextDeadline bool)
 You can use them like the next example:
 
 ```go
-var cb = circuitbreaker.New(circuitbreaker.WithCounterResetInterval(1000*time.Milliseconds), 
-                            circuitbreaker.WithHalfOpenMaxSuccesses(4))
+cb := circuitbreaker.New(
+    circuitbreaker.WithClock(clock.New()),
+    circuitbreaker.WithFailOnContextCancel(true),
+    circuitbreaker.WithFailOnContextDeadline(true),
+    circuitbreaker.WithHalfOpenMaxSuccesses(10),
+    circuitbreaker.WithOpenBackOff(backoff.NewExponentialBackOff()),
+    circuitbreaker.WithOpenTimeout(10*time.Second),
+    circuitbreaker.WithCounterResetInterval(10*time.Second),
+    circuitbreaker.WithTripByFailureCount(10),
+    circuitbreaker.WithTripByConsecutiveFailure(10),
+    circuitbreaker.WithTripByFailureRate(10, 0.9),
+)
 ```
 
 ## Simple Examples with Do.
