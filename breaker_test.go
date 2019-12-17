@@ -115,7 +115,7 @@ func TestDo(t *testing.T) {
 			{FailOnContextDeadline: false, ExpectedFailures: 0},
 		}
 		for _, test := range tests {
-			timeoutErr := errors.New("context's Done channel closed.")
+			timeoutErr := errors.New("context's Done channel closed")
 			t.Run(fmt.Sprintf("FailOnContextDeadline=%t", test.FailOnContextDeadline), func(t *testing.T) {
 				cb := circuitbreaker.New(circuitbreaker.WithFailOnContextDeadline(test.FailOnContextDeadline))
 				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
@@ -133,7 +133,7 @@ func TestDo(t *testing.T) {
 
 	t.Run("cyclic-state-transition", func(t *testing.T) {
 		clkMock := clock.NewMock()
-		cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
+		cb := circuitbreaker.New(circuitbreaker.WithTripByFailureCount(3),
 			circuitbreaker.WithClock(clkMock),
 			circuitbreaker.WithOpenTimeout(1000*time.Millisecond),
 			circuitbreaker.WithHalfOpenMaxSuccesses(4))
@@ -184,19 +184,22 @@ func TestDo(t *testing.T) {
 
 func TestCircuitBreakerTripFuncs(t *testing.T) {
 	t.Run("TripFuncThreshold", func(t *testing.T) {
-		shouldTrip := circuitbreaker.NewTripFuncThreshold(5)
+		cb := circuitbreaker.New(circuitbreaker.WithTripByFailureCount(5))
+		shouldTrip := cb.GetShouldTripFunc()
 		assert.False(t, shouldTrip(&circuitbreaker.Counters{Failures: 4}))
 		assert.True(t, shouldTrip(&circuitbreaker.Counters{Failures: 5}))
 		assert.True(t, shouldTrip(&circuitbreaker.Counters{Failures: 6}))
 	})
 	t.Run("TripFuncConsecutiveFailures", func(t *testing.T) {
-		shouldTrip := circuitbreaker.NewTripFuncConsecutiveFailures(5)
+		cb := circuitbreaker.New(circuitbreaker.WithTripBySuccessiveFailures(5))
+		shouldTrip := cb.GetShouldTripFunc()
 		assert.False(t, shouldTrip(&circuitbreaker.Counters{ConsecutiveFailures: 4}))
 		assert.True(t, shouldTrip(&circuitbreaker.Counters{ConsecutiveFailures: 5}))
 		assert.True(t, shouldTrip(&circuitbreaker.Counters{ConsecutiveFailures: 6}))
 	})
 	t.Run("TripFuncFailureRate", func(t *testing.T) {
-		shouldTrip := circuitbreaker.NewTripFuncFailureRate(10, 0.4)
+		cb := circuitbreaker.New(circuitbreaker.WithTripByFailureRate(10, 0.4))
+		shouldTrip := cb.GetShouldTripFunc()
 		assert.False(t, shouldTrip(&circuitbreaker.Counters{Successes: 1, Failures: 8}))
 		assert.True(t, shouldTrip(&circuitbreaker.Counters{Successes: 1, Failures: 9}))
 		assert.False(t, shouldTrip(&circuitbreaker.Counters{Successes: 60, Failures: 39}))

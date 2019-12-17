@@ -17,7 +17,7 @@ var (
 	ErrOpen = errors.New("circuit breaker open")
 
 	// DefaultTripFunc is used when Options.ShouldTrip is nil.
-	DefaultTripFunc = NewTripFuncThreshold(10)
+	DefaultTripFunc = newTripFuncThreshold(10)
 )
 
 // Default setting parameters.
@@ -38,10 +38,10 @@ const (
 
 // DefaultOpenBackOff returns defaultly used BackOff.
 func DefaultOpenBackOff() backoff.BackOff {
-	backoff := backoff.NewExponentialBackOff()
-	backoff.MaxElapsedTime = 0
-	backoff.Reset()
-	return backoff
+	_backoff := backoff.NewExponentialBackOff()
+	_backoff.MaxElapsedTime = 0
+	_backoff.Reset()
+	return _backoff
 }
 
 // Counters holds internal counter(s) of CircuitBreaker.
@@ -81,22 +81,15 @@ func (c *Counters) incrementFailures() {
 // StateClosed. If TripFunc returns true, the cb's state goes to StateOpen.
 type TripFunc func(*Counters) bool
 
-// NewTripFuncThreshold provides a TripFunc. It returns true if the
-// Failures counter is larger than or equals to threshold.
-func NewTripFuncThreshold(threshold int64) TripFunc {
+func newTripFuncThreshold(threshold int64) TripFunc {
 	return func(cnt *Counters) bool { return cnt.Failures >= threshold }
 }
 
-// NewTripFuncConsecutiveFailures provides a TripFunc that returns true
-// if the consecutive failures is larger than or equals to threshold.
-func NewTripFuncConsecutiveFailures(threshold int64) TripFunc {
+func newTripFuncConsecutiveFailures(threshold int64) TripFunc {
 	return func(cnt *Counters) bool { return cnt.ConsecutiveFailures >= threshold }
 }
 
-// NewTripFuncFailureRate provides a TripFunc that returns true if the failure
-// rate is higher or equals to rate. If the samples are fewer than min, always
-// returns false.
-func NewTripFuncFailureRate(min int64, rate float64) TripFunc {
+func newTripFuncFailureRate(min int64, rate float64) TripFunc {
 	return func(cnt *Counters) bool {
 		if cnt.Successes+cnt.Failures < min {
 			return false
@@ -257,7 +250,7 @@ func WithHalfOpenMaxSuccesses(maxSuccesses int64) BreakerOption {
 	})
 }
 
-// Set the interval of the circuit breaker
+// Set the interval of the circuit breaker, which is the cyclic time period to reset the internal counters
 func WithCounterResetInterval(interval time.Duration) BreakerOption {
 	return fnApplyOptions(func(options *options) {
 		options.interval = interval
@@ -278,6 +271,25 @@ func WithFailOnContextDeadline(failOnContextDeadline bool) BreakerOption {
 	})
 }
 
+// Option alias of newTripFuncThreshold
+// It returns true if the failures counter is larger than or equals to threshold.
+func WithTripByFailureCount(threshold int64) BreakerOption {
+	return WithTripFunc(newTripFuncThreshold(threshold))
+}
+
+// Option alias of newTripFuncConsecutiveFailures returns true
+// if the consecutive failures is larger than or equals to threshold.
+func WithTripBySuccessiveFailures(threshold int64) BreakerOption {
+	return WithTripFunc(newTripFuncConsecutiveFailures(threshold))
+}
+
+// Option alias of newTripFuncFailureRate returns true if the failure
+// rate is higher or equals to rate. If the samples are fewer than min, always
+// returns false.
+func WithTripByFailureRate(min int64, rate float64) BreakerOption {
+	return WithTripFunc(newTripFuncFailureRate(min, rate))
+}
+
 func defaultOptions() *options {
 	return &options{
 		shouldTrip:           DefaultTripFunc,
@@ -289,8 +301,25 @@ func defaultOptions() *options {
 	}
 }
 
-// New returns a new CircuitBreaker with *Options. If opts is nil, default
-// configurations are used.
+// New returns a new CircuitBreaker
+// The constructor will be instanced using the functional options pattern. When creating a new circuit breaker
+// we should pass or left it blank if we want to use its default options.
+// An example of the constructor would be like this:
+//
+// cb := circuitbreaker.New(
+//     circuitbreaker.WithClock(clock.New()),
+//     circuitbreaker.WithFailOnContextCancel(true),
+//     circuitbreaker.WithFailOnContextDeadline(true),
+//     circuitbreaker.WithHalfOpenMaxSuccesses(10),
+//     circuitbreaker.WithOpenBackOff(backoff.NewExponentialBackOff()),
+//     circuitbreaker.WithOpenTimeout(10*time.Second),
+//     circuitbreaker.WithCounterResetInterval(10*time.Second),
+//     circuitbreaker.WithTripByFailureCount(10),
+//     circuitbreaker.WithTripByConsecutiveFailure(10),
+//     circuitbreaker.WithTripByFailureRate(10, 0.9),
+// )
+//
+// The default options are described in the defaultOptions function
 func New(opts ...BreakerOption) *CircuitBreaker {
 	cbOptions := defaultOptions()
 
@@ -317,6 +346,11 @@ func New(opts ...BreakerOption) *CircuitBreaker {
 
 // An Operation is executed by Do().
 type Operation func() (interface{}, error)
+
+// GetShouldTripFunc returns the data of the shouldTripFunc
+func (cb *CircuitBreaker) GetShouldTripFunc() TripFunc {
+	return cb.shouldTrip
+}
 
 // Do executes the Operation o and returns the return values if
 // cb.Ready() is true. If not ready, cb doesn't execute f and returns
