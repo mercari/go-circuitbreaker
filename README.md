@@ -17,32 +17,6 @@ See: [Circuit Breaker pattern \- Cloud Design Patterns \| Microsoft Docs](https:
 
 This library is using the [functional options pattern](https://github.com/uber-go/guide/blob/master/style.md#functional-options) to instance a new circuit breaker. The functions are the following:
 
-```go
-// Set the function for counter
-WithTripFunc(tripFunc TripFunc)
-
-// Set the clock
-WithClock(clock clock.Clock)
-
-// Set the time backoff
-WithOpenTimeoutBackOff(backoff backoff.BackOff) 
-
-// Set the timeout of the circuit breaker
-WithOpenTimeout(timeout time.Duration)
-
-// Set the number of half open successes
-WithHalfOpenMaxSuccesses(maxSuccesses int64)
-
-// Set the interval of the circuit breaker
-WithCounterResetInterval(interval time.Duration)
-
-// Set if the context should fail on cancel
-WithFailOnContextCancel(failOnContextCancel bool) 
-
-// Set if the context should fail on deadline
-WithFailOnContextDeadline(failOnContextDeadline bool)
-```
-
 You can use them like the next example:
 
 ```go
