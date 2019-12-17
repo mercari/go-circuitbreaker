@@ -214,11 +214,14 @@ func TestIgnore(t *testing.T) {
 	})
 	t.Run("ignore", func(t *testing.T) {
 		originalErr := errors.New("logic error")
-		err := circuitbreaker.Ignore(originalErr)
-		assert.Equal(t, err.Error(), "circuitbreaker does not mark this error as a failure: logic error")
-		nfe, ok := err.(*circuitbreaker.IgnorableError)
-		assert.True(t, ok)
-		assert.Equal(t, nfe.Unwrap(), originalErr)
+		if err := circuitbreaker.Ignore(originalErr); err != nil {
+			assert.Equal(t, err.Error(), "circuitbreaker does not mark this error as a failure: logic error")
+			nfe, ok := err.(*circuitbreaker.IgnorableError)
+			assert.True(t, ok)
+			assert.Equal(t, nfe.Unwrap(), originalErr)
+		} else {
+			assert.Fail(t, "there should be an error here")
+		}
 	})
 }
 
@@ -228,11 +231,14 @@ func TestMarkAsSuccess(t *testing.T) {
 	})
 	t.Run("MarkAsSuccess", func(t *testing.T) {
 		originalErr := errors.New("logic error")
-		err := circuitbreaker.MarkAsSuccess(originalErr)
-		assert.Equal(t, err.Error(), "circuitbreaker mark this error as a success: logic error")
-		nfe, ok := err.(*circuitbreaker.SuccessMarkableError)
-		assert.True(t, ok)
-		assert.Equal(t, nfe.Unwrap(), originalErr)
+		if err := circuitbreaker.MarkAsSuccess(originalErr); err != nil {
+			assert.Equal(t, err.Error(), "circuitbreaker mark this error as a success: logic error")
+			nfe, ok := err.(*circuitbreaker.SuccessMarkableError)
+			assert.True(t, ok)
+			assert.Equal(t, nfe.Unwrap(), originalErr)
+		} else {
+			assert.Fail(t, "there should be an error here")
+		}
 	})
 }
 
