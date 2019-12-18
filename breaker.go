@@ -194,6 +194,17 @@ type Options struct {
 	// FailOnContextDeadline controls if CircuitBreaker mark an error when the
 	// passed context.Done() is context.DeadlineExceeded as a fail.
 	FailOnContextDeadline bool
+
+	// NotifyStateChange controls wheather CircuitBreaker notifies of its
+	// state changes or not. If true, GetStateChange returns the channel that
+	// can observe the change on it.
+	NotifyStateChange bool
+}
+
+// StateChange represents transition of CircuitBreaker's state.
+type StateChange struct {
+	From State
+	To   State
 }
 
 // CircuitBreaker provides circuit breaker pattern.
@@ -206,9 +217,10 @@ type CircuitBreaker struct {
 	failOnContextCancel   bool
 	failOnContextDeadline bool
 
-	mu    sync.RWMutex
-	state state
-	cnt   Counters
+	mu            sync.RWMutex
+	state         state
+	cnt           Counters
+	stateChangeCh chan StateChange
 }
 
 // New returns a new CircuitBreaker with *Options. If opts is nil, default
@@ -247,6 +259,11 @@ func New(opts *Options) *CircuitBreaker {
 		interval = DefaultInterval
 	}
 
+	var ch chan StateChange
+	if opts.NotifyStateChange {
+		ch = make(chan StateChange, 10)
+	}
+
 	cb := &CircuitBreaker{
 		shouldTrip:            shouldTrip,
 		clock:                 _clock,
@@ -255,6 +272,7 @@ func New(opts *Options) *CircuitBreaker {
 		halfOpenMaxSuccesses:  halfOpenMaxSuccesses,
 		failOnContextCancel:   opts.FailOnContextCancel,
 		failOnContextDeadline: opts.FailOnContextDeadline,
+		stateChangeCh:         ch,
 	}
 	cb.setState(&stateClosed{})
 	return cb
@@ -402,6 +420,33 @@ func (cb *CircuitBreaker) setState(s state) {
 	if cb.state != nil {
 		cb.state.onExit(cb)
 	}
+	from := cb.state
 	cb.state = s
 	cb.state.onEntry(cb)
+	if cb.stateChangeCh != nil && from != nil {
+		cb.notifyChange(from.State(), s.State())
+	}
+}
+
+func (cb *CircuitBreaker) notifyChange(from, to State) {
+	t := StateChange{from, to}
+	select {
+	case cb.stateChangeCh <- t:
+	default:
+		// Trancate the least recent change
+		select {
+		case <-cb.stateChangeCh:
+		default:
+		}
+		cb.stateChangeCh <- t
+	}
+}
+
+// GetStateChanges returns the channel of StateChange. Some StateChange
+// may be truncated if consumption is slower. This is for performance.
+func (cb *CircuitBreaker) GetStateChanges() (<-chan StateChange, error) {
+	if cb.stateChangeCh != nil {
+		return cb.stateChangeCh, nil
+	}
+	return nil, errors.New("notifyStateChange option is not true")
 }

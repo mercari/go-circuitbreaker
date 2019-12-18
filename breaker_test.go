@@ -304,3 +304,44 @@ func TestReportFunctions(t *testing.T) {
 		assert.Equal(t, int64(1), cb.Counters().Failures)
 	})
 }
+
+func TestNotifyStateChange(t *testing.T) {
+	t.Run("Notify collectly", func(t *testing.T) {
+		cb := circuitbreaker.New(&circuitbreaker.Options{NotifyStateChange: true})
+		go func() {
+			ch, _ := cb.GetStateChanges()
+			var change circuitbreaker.StateChange
+			change = <-ch
+			assert.Equal(t, circuitbreaker.StateChange{circuitbreaker.StateClosed, circuitbreaker.StateOpen}, change)
+			change = <-ch
+			assert.Equal(t, circuitbreaker.StateChange{circuitbreaker.StateOpen, circuitbreaker.StateHalfOpen}, change)
+			change = <-ch
+			assert.Equal(t, circuitbreaker.StateChange{circuitbreaker.StateHalfOpen, circuitbreaker.StateClosed}, change)
+		}()
+		cb.SetState(circuitbreaker.StateOpen)
+		cb.SetState(circuitbreaker.StateHalfOpen)
+		cb.SetState(circuitbreaker.StateClosed)
+	})
+	t.Run("Not blocked", func(t *testing.T) {
+		cb := circuitbreaker.New(&circuitbreaker.Options{NotifyStateChange: true})
+		doneCh := make(chan struct{})
+		resultCh := make(chan struct{})
+		go func() {
+			for {
+				cb.Ready()
+				cb.Success()
+				select {
+				case <-doneCh:
+					close(resultCh)
+					return
+				default:
+				}
+			}
+		}()
+		for i := 0; i < 100; i++ {
+			cb.SetState(circuitbreaker.StateClosed)
+		}
+		close(doneCh)
+		<-resultCh
+	})
+}
