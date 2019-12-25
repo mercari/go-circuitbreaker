@@ -62,7 +62,7 @@ cb := circuitbreaker.New(nil)
 data, err := cb.Do(context.Background(), func() (interface{}, error) {
   u, err := fetchUserInfo("john")
   if err == errUserNotFound {
-    return circuitbreaker.Ignore(err) // cb does not treat the err as a failure.
+    return u, circuitbreaker.Ignore(err) // cb does not treat the err as a failure.
   }
   return u, err
 })
