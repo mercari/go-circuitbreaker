@@ -133,7 +133,7 @@ func TestDo(t *testing.T) {
 
 	t.Run("cyclic-state-transition", func(t *testing.T) {
 		clkMock := clock.NewMock()
-		cb := circuitbreaker.New(circuitbreaker.WithTripByFailureCount(3),
+		cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 			circuitbreaker.WithClock(clkMock),
 			circuitbreaker.WithOpenTimeout(1000*time.Millisecond),
 			circuitbreaker.WithHalfOpenMaxSuccesses(4))
@@ -184,22 +184,19 @@ func TestDo(t *testing.T) {
 
 func TestCircuitBreakerTripFuncs(t *testing.T) {
 	t.Run("TripFuncThreshold", func(t *testing.T) {
-		cb := circuitbreaker.New(circuitbreaker.WithTripByFailureCount(5))
-		shouldTrip := cb.GetShouldTripFunc()
+		shouldTrip := circuitbreaker.NewTripFuncThreshold(5)
 		assert.False(t, shouldTrip(&circuitbreaker.Counters{Failures: 4}))
 		assert.True(t, shouldTrip(&circuitbreaker.Counters{Failures: 5}))
 		assert.True(t, shouldTrip(&circuitbreaker.Counters{Failures: 6}))
 	})
 	t.Run("TripFuncConsecutiveFailures", func(t *testing.T) {
-		cb := circuitbreaker.New(circuitbreaker.WithTripBySuccessiveFailures(5))
-		shouldTrip := cb.GetShouldTripFunc()
+		shouldTrip := circuitbreaker.NewTripFuncConsecutiveFailures(5)
 		assert.False(t, shouldTrip(&circuitbreaker.Counters{ConsecutiveFailures: 4}))
 		assert.True(t, shouldTrip(&circuitbreaker.Counters{ConsecutiveFailures: 5}))
 		assert.True(t, shouldTrip(&circuitbreaker.Counters{ConsecutiveFailures: 6}))
 	})
 	t.Run("TripFuncFailureRate", func(t *testing.T) {
-		cb := circuitbreaker.New(circuitbreaker.WithTripByFailureRate(10, 0.4))
-		shouldTrip := cb.GetShouldTripFunc()
+		shouldTrip := circuitbreaker.NewTripFuncFailureRate(10, 0.4)
 		assert.False(t, shouldTrip(&circuitbreaker.Counters{Successes: 1, Failures: 8}))
 		assert.True(t, shouldTrip(&circuitbreaker.Counters{Successes: 1, Failures: 9}))
 		assert.False(t, shouldTrip(&circuitbreaker.Counters{Successes: 60, Failures: 39}))

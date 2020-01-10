@@ -17,7 +17,7 @@ var (
 	ErrOpen = errors.New("circuit breaker open")
 
 	// DefaultTripFunc is used when Options.ShouldTrip is nil.
-	DefaultTripFunc = newTripFuncThreshold(10)
+	DefaultTripFunc = NewTripFuncThreshold(10)
 )
 
 // Default setting parameters.
@@ -81,15 +81,22 @@ func (c *Counters) incrementFailures() {
 // StateClosed. If TripFunc returns true, the cb's state goes to StateOpen.
 type TripFunc func(*Counters) bool
 
-func newTripFuncThreshold(threshold int64) TripFunc {
+// NewTripFuncThreshold provides a TripFunc. It returns true if the
+// Failures counter is larger than or equals to threshold.
+func NewTripFuncThreshold(threshold int64) TripFunc {
 	return func(cnt *Counters) bool { return cnt.Failures >= threshold }
 }
 
-func newTripFuncConsecutiveFailures(threshold int64) TripFunc {
+// NewTripFuncConsecutiveFailures provides a TripFunc that returns true
+// if the consecutive failures is larger than or equals to threshold.
+func NewTripFuncConsecutiveFailures(threshold int64) TripFunc {
 	return func(cnt *Counters) bool { return cnt.ConsecutiveFailures >= threshold }
 }
 
-func newTripFuncFailureRate(min int64, rate float64) TripFunc {
+// NewTripFuncFailureRate provides a TripFunc that returns true if the failure
+// rate is higher or equals to rate. If the samples are fewer than min, always
+// returns false.
+func NewTripFuncFailureRate(min int64, rate float64) TripFunc {
 	return func(cnt *Counters) bool {
 		if cnt.Successes+cnt.Failures < min {
 			return false
@@ -271,25 +278,6 @@ func WithFailOnContextDeadline(failOnContextDeadline bool) BreakerOption {
 	})
 }
 
-// Option alias of newTripFuncThreshold
-// It returns true if the failures counter is larger than or equals to threshold.
-func WithTripByFailureCount(threshold int64) BreakerOption {
-	return WithTripFunc(newTripFuncThreshold(threshold))
-}
-
-// Option alias of newTripFuncConsecutiveFailures returns true
-// if the consecutive failures is larger than or equals to threshold.
-func WithTripBySuccessiveFailures(threshold int64) BreakerOption {
-	return WithTripFunc(newTripFuncConsecutiveFailures(threshold))
-}
-
-// Option alias of newTripFuncFailureRate returns true if the failure
-// rate is higher or equals to rate. If the samples are fewer than min, always
-// returns false.
-func WithTripByFailureRate(min int64, rate float64) BreakerOption {
-	return WithTripFunc(newTripFuncFailureRate(min, rate))
-}
-
 func defaultOptions() *options {
 	return &options{
 		shouldTrip:           DefaultTripFunc,
@@ -346,11 +334,6 @@ func New(opts ...BreakerOption) *CircuitBreaker {
 
 // An Operation is executed by Do().
 type Operation func() (interface{}, error)
-
-// GetShouldTripFunc returns the data of the shouldTripFunc
-func (cb *CircuitBreaker) GetShouldTripFunc() TripFunc {
-	return cb.shouldTrip
-}
 
 // Do executes the Operation o and returns the return values if
 // cb.Ready() is true. If not ready, cb doesn't execute f and returns
