@@ -114,7 +114,7 @@ func (e *IgnorableError) Error() string {
 	return fmt.Sprintf("circuitbreaker does not mark this error as a failure: %s", e.err.Error())
 }
 
-// Unwrap unwaps e.
+// Unwrap unwraps e.
 func (e *IgnorableError) Unwrap() error { return e.err }
 
 // Ignore wraps the given err in a *IgnorableError.
@@ -134,7 +134,7 @@ func (e *SuccessMarkableError) Error() string {
 	return fmt.Sprintf("circuitbreaker mark this error as a success: %s", e.err.Error())
 }
 
-// Unwrap unwaps e.
+// Unwrap unwraps e.
 func (e *SuccessMarkableError) Unwrap() error { return e.err }
 
 // MarkAsSuccess wraps the given err in a *SuccessMarkableError.
