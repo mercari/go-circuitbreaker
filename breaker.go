@@ -177,7 +177,7 @@ type Options struct {
 
 	// HalfOpenMaxSuccesses is max count of successive successes during the state
 	// is in StateHalfOpened. If the state is StateHalfOpened and the successive
-	// successes reaches this threashold, the state of CircuitBreaker changes
+	// successes reaches this threshold, the state of CircuitBreaker changes
 	// into StateClosed. If zero, DefaultHalfOpenMaxSuccesses is used.
 	HalfOpenMaxSuccesses int64
 
