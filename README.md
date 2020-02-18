@@ -46,7 +46,7 @@ func getUserInfo(ctx context.Context, name string) (_ *User,err error) {
 
 ## Smart handling for context.Canceled and context.DeadlineExceeded
 
-In microservices architectures, Circuit Breaker is essential to protect services you depend on from cascading failures and keep your services latency low during long-lasting failures. And for microservices written in Go, cancel request by propagating context is also a good convention. But there are some pitfall when you combinate context cnad circuit breaker.
+In microservices architectures, Circuit Breaker is essential to protect services you depend on from cascading failures and keep your services latency low during long-lasting failures. And for microservices written in Go, cancel request by propagating context is also a good convention. But there are some pitfall when you combinate context and circuit breaker.
 
 Your microservices' users are able to cancel your requests. The cancellation will be propagated through the context to your operation which is protected by CB. If the CB mark the canceled execution as a fail, your CB may open even though there is no problem in your infrastructure. It is a false-positive CB-open. It would prevent your other clients from doing tasks successfully because the CB is shared by all clients. Otherwise, if the CB mark the canceled execution as a success, the CB may back to closed unexpectedly. (it's a false-negative). In order to avoid those unexpected issue, `go-circuitbreaker` provides *an option to ignore the errors caused by the context cancellation*.
 
