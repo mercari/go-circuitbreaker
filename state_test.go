@@ -53,6 +53,73 @@ func TestCircuitBreakerStateTransitions(t *testing.T) {
 	}
 }
 
+func TestCircuitBreakerOnStateChange(t *testing.T) {
+	type stateChange struct {
+		from circuitbreaker.State
+		to   circuitbreaker.State
+	}
+
+	expectedStateChanges := []stateChange{
+		{
+			from: circuitbreaker.StateClosed,
+			to:   circuitbreaker.StateOpen,
+		},
+		{
+			from: circuitbreaker.StateOpen,
+			to:   circuitbreaker.StateHalfOpen,
+		},
+		{
+			from: circuitbreaker.StateHalfOpen,
+			to:   circuitbreaker.StateOpen,
+		},
+		{
+			from: circuitbreaker.StateOpen,
+			to:   circuitbreaker.StateHalfOpen,
+		},
+		{
+			from: circuitbreaker.StateHalfOpen,
+			to:   circuitbreaker.StateClosed,
+		},
+	}
+	var actualStateChanges []stateChange
+
+	clock := clock.NewMock()
+	cb := circuitbreaker.New(&circuitbreaker.Options{
+		ShouldTrip:           circuitbreaker.NewTripFuncThreshold(3),
+		Clock:                clock,
+		OpenTimeout:          1000 * time.Millisecond,
+		HalfOpenMaxSuccesses: 4,
+		OnStateChange: func(from, to circuitbreaker.State) {
+			actualStateChanges = append(actualStateChanges, stateChange{
+				from: from,
+				to:   to,
+			})
+		},
+	})
+
+	// Scenario: 3 Fails. State changes to -> StateOpen.
+	cb.Fail()
+	cb.Fail()
+	cb.Fail()
+
+	// Scenario: After OpenTimeout exceeded. -> StateHalfOpen.
+	assertChangeStateToHalfOpenAfter(t, cb, clock, 1000*time.Millisecond)
+
+	// Scenario: Hit Fail. State back to StateOpen.
+	cb.Fail()
+
+	// Scenario: After OpenTimeout exceeded. -> StateHalfOpen. (again)
+	assertChangeStateToHalfOpenAfter(t, cb, clock, 1000*time.Millisecond)
+
+	// Scenario: Hit Success. State -> StateClosed.
+	cb.Success()
+	cb.Success()
+	cb.Success()
+	cb.Success()
+
+	assert.Equal(t, expectedStateChanges, actualStateChanges)
+}
+
 // TestStateClosed tests...
 // - Ready() always returns true.
 // - Change state if Failures threshold reached.

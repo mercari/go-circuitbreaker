@@ -76,6 +76,9 @@ func (c *Counters) incrementFailures() {
 	c.ConsecutiveSuccesses = 0
 }
 
+// StateChangeHook is a function which will be invoked when the state is changed.
+type StateChangeHook func(oldState, newState State)
+
 // TripFunc is a function to determine if CircuitBreaker should open (trip) or
 // not. TripFunc is called when cb.Fail was called and the state was
 // StateClosed. If TripFunc returns true, the cb's state goes to StateOpen.
@@ -187,6 +190,9 @@ type Options struct {
 	// If nil, DefaultTripFunc is used.
 	ShouldTrip TripFunc
 
+	// OnStateChange is a function which will be invoked when the state is changed.
+	OnStateChange StateChangeHook
+
 	// FailOnContextCancel controls if CircuitBreaker mark an error when the
 	// passed context.Done() is context.Canceled as a fail.
 	FailOnContextCancel bool
@@ -203,6 +209,7 @@ type CircuitBreaker struct {
 	halfOpenMaxSuccesses  int64
 	openBackOff           backoff.BackOff
 	shouldTrip            TripFunc
+	onStateChange         StateChangeHook
 	failOnContextCancel   bool
 	failOnContextDeadline bool
 
@@ -249,6 +256,7 @@ func New(opts *Options) *CircuitBreaker {
 
 	cb := &CircuitBreaker{
 		shouldTrip:            shouldTrip,
+		onStateChange:         opts.OnStateChange,
 		clock:                 _clock,
 		interval:              opts.Interval,
 		openBackOff:           openBackOff,
@@ -402,6 +410,15 @@ func (cb *CircuitBreaker) setState(s state) {
 	if cb.state != nil {
 		cb.state.onExit(cb)
 	}
+	from := cb.state
 	cb.state = s
 	cb.state.onEntry(cb)
+	cb.handleOnStateChange(from, s)
+}
+
+func (cb *CircuitBreaker) handleOnStateChange(from, to state) {
+	if from == nil || cb.onStateChange == nil {
+		return
+	}
+	cb.onStateChange(from.State(), to.State())
 }
