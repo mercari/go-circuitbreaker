@@ -13,7 +13,7 @@ import (
 
 var (
 	// ErrOpen is an error to signify that the CB is open and executing
-	// operatins are not allowed.
+	// operations are not allowed.
 	ErrOpen = errors.New("circuit breaker open")
 
 	// DefaultTripFunc is used when Options.ShouldTrip is nil.
