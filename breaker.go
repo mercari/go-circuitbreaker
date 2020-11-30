@@ -258,7 +258,7 @@ func New(opts *Options) *CircuitBreaker {
 		shouldTrip:            shouldTrip,
 		onStateChange:         opts.OnStateChange,
 		clock:                 _clock,
-		interval:              opts.Interval,
+		interval:              interval,
 		openBackOff:           openBackOff,
 		halfOpenMaxSuccesses:  halfOpenMaxSuccesses,
 		failOnContextCancel:   opts.FailOnContextCancel,
