@@ -13,7 +13,7 @@ import (
 
 var (
 	// ErrOpen is an error to signify that the CB is open and executing
-	// operatins are not allowed.
+	// operations are not allowed.
 	ErrOpen = errors.New("circuit breaker open")
 
 	// DefaultTripFunc is used when Options.ShouldTrip is nil.
@@ -76,6 +76,9 @@ func (c *Counters) incrementFailures() {
 	c.ConsecutiveSuccesses = 0
 }
 
+// StateChangeHook is a function which will be invoked when the state is changed.
+type StateChangeHook func(oldState, newState State)
+
 // TripFunc is a function to determine if CircuitBreaker should open (trip) or
 // not. TripFunc is called when cb.Fail was called and the state was
 // StateClosed. If TripFunc returns true, the cb's state goes to StateOpen.
@@ -114,7 +117,7 @@ func (e *IgnorableError) Error() string {
 	return fmt.Sprintf("circuitbreaker does not mark this error as a failure: %s", e.err.Error())
 }
 
-// Unwrap unwaps e.
+// Unwrap unwraps e.
 func (e *IgnorableError) Unwrap() error { return e.err }
 
 // Ignore wraps the given err in a *IgnorableError.
@@ -134,7 +137,7 @@ func (e *SuccessMarkableError) Error() string {
 	return fmt.Sprintf("circuitbreaker mark this error as a success: %s", e.err.Error())
 }
 
-// Unwrap unwaps e.
+// Unwrap unwraps e.
 func (e *SuccessMarkableError) Unwrap() error { return e.err }
 
 // MarkAsSuccess wraps the given err in a *SuccessMarkableError.
@@ -177,7 +180,7 @@ type options struct {
 
 	// HalfOpenMaxSuccesses is max count of successive successes during the state
 	// is in StateHalfOpened. If the state is StateHalfOpened and the successive
-	// successes reaches this threashold, the state of CircuitBreaker changes
+	// successes reaches this threshold, the state of CircuitBreaker changes
 	// into StateClosed. If zero, DefaultHalfOpenMaxSuccesses is used.
 	halfOpenMaxSuccesses int64
 
@@ -186,6 +189,9 @@ type options struct {
 	// the state will be changed to StateOpened.
 	// If nil, DefaultTripFunc is used.
 	shouldTrip TripFunc
+
+	// OnStateChange is a function which will be invoked when the state is changed.
+	OnStateChange StateChangeHook
 
 	// FailOnContextCancel controls if CircuitBreaker mark an error when the
 	// passed context.Done() is context.Canceled as a fail.
@@ -203,6 +209,7 @@ type CircuitBreaker struct {
 	halfOpenMaxSuccesses  int64
 	openBackOff           backoff.BackOff
 	shouldTrip            TripFunc
+	onStateChange         StateChangeHook
 	failOnContextCancel   bool
 	failOnContextDeadline bool
 
@@ -321,6 +328,7 @@ func New(opts ...BreakerOption) *CircuitBreaker {
 
 	cb := &CircuitBreaker{
 		shouldTrip:            cbOptions.shouldTrip,
+		onStateChange:         cbOptions.OnStateChange,
 		clock:                 cbOptions.clock,
 		interval:              cbOptions.interval,
 		openBackOff:           cbOptions.openBackOff,
@@ -444,8 +452,10 @@ func (cb *CircuitBreaker) Counters() Counters {
 
 // Reset resets cb's state with StateClosed.
 func (cb *CircuitBreaker) Reset() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
 	cb.cnt.reset()
-	cb.SetState(StateClosed)
+	cb.setState(&stateClosed{})
 }
 
 // SetState set state of cb to st.
@@ -472,6 +482,15 @@ func (cb *CircuitBreaker) setState(s state) {
 	if cb.state != nil {
 		cb.state.onExit(cb)
 	}
+	from := cb.state
 	cb.state = s
 	cb.state.onEntry(cb)
+	cb.handleOnStateChange(from, s)
+}
+
+func (cb *CircuitBreaker) handleOnStateChange(from, to state) {
+	if from == nil || cb.onStateChange == nil {
+		return
+	}
+	cb.onStateChange(from.State(), to.State())
 }
