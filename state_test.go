@@ -14,13 +14,11 @@ import (
 )
 
 func TestCircuitBreakerStateTransitions(t *testing.T) {
-	clock := clock.NewMock()
-	cb := circuitbreaker.New(&circuitbreaker.Options{
-		ShouldTrip:           circuitbreaker.NewTripFuncThreshold(3),
-		Clock:                clock,
-		OpenTimeout:          1000 * time.Millisecond,
-		HalfOpenMaxSuccesses: 4,
-	})
+	clk := clock.NewMock()
+	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
+		circuitbreaker.WithClock(clk),
+		circuitbreaker.WithOpenTimeout(1000*time.Millisecond),
+		circuitbreaker.WithHalfOpenMaxSuccesses(4))
 
 	for i := 0; i < 10; i++ {
 		// Scenario: 3 Fails. State changes to -> StateOpen.
@@ -32,14 +30,14 @@ func TestCircuitBreakerStateTransitions(t *testing.T) {
 		assert.Equal(t, circuitbreaker.StateOpen, cb.State())
 
 		// Scenario: After OpenTimeout exceeded. -> StateHalfOpen.
-		assertChangeStateToHalfOpenAfter(t, cb, clock, 1000*time.Millisecond)
+		assertChangeStateToHalfOpenAfter(t, cb, clk, 1000*time.Millisecond)
 
 		// Scenario: Hit Fail. State back to StateOpen.
 		cb.Fail()
 		assert.Equal(t, circuitbreaker.StateOpen, cb.State())
 
 		// Scenario: After OpenTimeout exceeded. -> StateHalfOpen. (again)
-		assertChangeStateToHalfOpenAfter(t, cb, clock, 1000*time.Millisecond)
+		assertChangeStateToHalfOpenAfter(t, cb, clk, 1000*time.Millisecond)
 
 		// Scenario: Hit Success. State -> StateClosed.
 		cb.Success()
@@ -84,18 +82,18 @@ func TestCircuitBreakerOnStateChange(t *testing.T) {
 	var actualStateChanges []stateChange
 
 	clock := clock.NewMock()
-	cb := circuitbreaker.New(&circuitbreaker.Options{
-		ShouldTrip:           circuitbreaker.NewTripFuncThreshold(3),
-		Clock:                clock,
-		OpenTimeout:          1000 * time.Millisecond,
-		HalfOpenMaxSuccesses: 4,
-		OnStateChange: func(from, to circuitbreaker.State) {
+	cb := circuitbreaker.New(
+		circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
+		circuitbreaker.WithClock(clock),
+		circuitbreaker.WithOpenTimeout(1000*time.Millisecond),
+		circuitbreaker.WithHalfOpenMaxSuccesses(4),
+		circuitbreaker.WithOnStateChangeHookFn(func(from, to circuitbreaker.State) {
 			actualStateChanges = append(actualStateChanges, stateChange{
 				from: from,
 				to:   to,
 			})
-		},
-	})
+		}),
+	)
 
 	// Scenario: 3 Fails. State changes to -> StateOpen.
 	cb.Fail()
@@ -125,12 +123,10 @@ func TestCircuitBreakerOnStateChange(t *testing.T) {
 // - Change state if Failures threshold reached.
 // - Interval ticker reset the internal counter..
 func TestStateClosed(t *testing.T) {
-	clock := clock.NewMock()
-	cb := circuitbreaker.New(&circuitbreaker.Options{
-		ShouldTrip: circuitbreaker.NewTripFuncThreshold(3),
-		Clock:      clock,
-		Interval:   1000 * time.Millisecond,
-	})
+	clk := clock.NewMock()
+	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
+		circuitbreaker.WithClock(clk),
+		circuitbreaker.WithCounterResetInterval(1000*time.Millisecond))
 
 	t.Run("Ready", func(t *testing.T) {
 		assert.True(t, cb.Ready())
@@ -149,9 +145,9 @@ func TestStateClosed(t *testing.T) {
 		cb.Reset()
 		cb.Success()
 		cb.Fail()
-		clock.Add(999 * time.Millisecond)
+		clk.Add(999 * time.Millisecond)
 		assert.Equal(t, circuitbreaker.Counters{Successes: 1, Failures: 1, ConsecutiveFailures: 1}, cb.Counters())
-		clock.Add(1 * time.Millisecond)
+		clk.Add(1 * time.Millisecond)
 		assert.Equal(t, circuitbreaker.Counters{}, cb.Counters())
 	})
 }
@@ -161,11 +157,9 @@ func TestStateClosed(t *testing.T) {
 // - Change state to StateHalfOpen after timer.
 func TestStateOpen(t *testing.T) {
 	clk := clock.NewMock()
-	cb := circuitbreaker.New(&circuitbreaker.Options{
-		ShouldTrip:  circuitbreaker.NewTripFuncThreshold(3),
-		Clock:       clk,
-		OpenTimeout: 500 * time.Millisecond,
-	})
+	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
+		circuitbreaker.WithClock(clk),
+		circuitbreaker.WithOpenTimeout(500*time.Millisecond))
 	t.Run("Ready", func(t *testing.T) {
 		cb.SetState(circuitbreaker.StateOpen)
 		assert.False(t, cb.Ready())
@@ -183,22 +177,20 @@ func TestStateOpen(t *testing.T) {
 		assert.Equal(t, circuitbreaker.Counters{Failures: 1}, cb.Counters()) // successes reset.
 	})
 	t.Run("HalfOpen-with-ExponentialOpenBackOff", func(t *testing.T) {
-		clock := clock.NewMock()
-		backoff := &backoff.ExponentialBackOff{
+		clkMock := clock.NewMock()
+		backoffTest := &backoff.ExponentialBackOff{
 			InitialInterval:     1000 * time.Millisecond,
 			RandomizationFactor: 0,
 			Multiplier:          2,
 			MaxInterval:         5 * time.Second,
 			MaxElapsedTime:      0,
-			Clock:               clock,
+			Clock:               clkMock,
 		}
-		cb := circuitbreaker.New(&circuitbreaker.Options{
-			ShouldTrip:           circuitbreaker.NewTripFuncThreshold(1),
-			HalfOpenMaxSuccesses: 1,
-			Clock:                clock,
-			OpenBackOff:          backoff,
-		})
-		backoff.Reset()
+		cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(1)),
+			circuitbreaker.WithHalfOpenMaxSuccesses(1),
+			circuitbreaker.WithClock(clkMock),
+			circuitbreaker.WithOpenTimeoutBackOff(backoffTest))
+		backoffTest.Reset()
 
 		tests := []struct {
 			f     func()
@@ -214,30 +206,28 @@ func TestStateOpen(t *testing.T) {
 			test.f()
 			assert.Equal(t, circuitbreaker.StateOpen, cb.State())
 
-			clock.Add(test.after - 1)
+			clkMock.Add(test.after - 1)
 			assert.Equal(t, circuitbreaker.StateOpen, cb.State())
 
-			clock.Add(1)
+			clkMock.Add(1)
 			assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
 		}
 	})
 	t.Run("OpenBackOff", func(t *testing.T) {
-		clock := clock.NewMock()
-		backoff := &backoff.ExponentialBackOff{
+		clkMock := clock.NewMock()
+		backoffTest := &backoff.ExponentialBackOff{
 			InitialInterval:     1000 * time.Millisecond,
 			RandomizationFactor: 0,
 			Multiplier:          2,
 			MaxInterval:         5 * time.Second,
 			MaxElapsedTime:      0,
-			Clock:               clock,
+			Clock:               clkMock,
 		}
-		cb := circuitbreaker.New(&circuitbreaker.Options{
-			ShouldTrip:           circuitbreaker.NewTripFuncThreshold(1),
-			HalfOpenMaxSuccesses: 1,
-			Clock:                clock,
-			OpenBackOff:          backoff,
-		})
-		backoff.Reset()
+		cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(1)),
+			circuitbreaker.WithHalfOpenMaxSuccesses(1),
+			circuitbreaker.WithClock(clkMock),
+			circuitbreaker.WithOpenTimeoutBackOff(backoffTest))
+		backoffTest.Reset()
 
 		tests := []struct {
 			f     func()
@@ -251,7 +241,7 @@ func TestStateOpen(t *testing.T) {
 		}
 		for _, test := range tests {
 			test.f()
-			assertChangeStateToHalfOpenAfter(t, cb, clock, test.after)
+			assertChangeStateToHalfOpenAfter(t, cb, clkMock, test.after)
 		}
 	})
 }
@@ -269,12 +259,10 @@ func assertChangeStateToHalfOpenAfter(t *testing.T, cb *circuitbreaker.CircuitBr
 // - If get a fail, the state changes to Open.
 // - If get a success, the state changes to Closed.
 func TestHalfOpen(t *testing.T) {
-	clock := clock.NewMock()
-	cb := circuitbreaker.New(&circuitbreaker.Options{
-		ShouldTrip:           circuitbreaker.NewTripFuncThreshold(3),
-		Clock:                clock,
-		HalfOpenMaxSuccesses: 4,
-	})
+	clkMock := clock.NewMock()
+	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
+		circuitbreaker.WithClock(clkMock),
+		circuitbreaker.WithHalfOpenMaxSuccesses(4))
 	t.Run("Ready", func(t *testing.T) {
 		cb.Reset()
 		cb.SetState(circuitbreaker.StateHalfOpen)
@@ -314,11 +302,11 @@ func run(wg *sync.WaitGroup, f func()) {
 
 func TestRace(t *testing.T) {
 	clock := clock.NewMock()
-	cb := circuitbreaker.New(&circuitbreaker.Options{
-		ShouldTrip: func(_ *circuitbreaker.Counters) bool { return true },
-		Clock:      clock,
-		Interval:   1000 * time.Millisecond,
-	})
+	cb := circuitbreaker.New(
+		circuitbreaker.WithTripFunc(func(_ *circuitbreaker.Counters) bool { return true }),
+		circuitbreaker.WithClock(clock),
+		circuitbreaker.WithCounterResetInterval(1000*time.Millisecond),
+	)
 	wg := &sync.WaitGroup{}
 	run(wg, func() {
 		cb.SetState(circuitbreaker.StateClosed)
@@ -327,10 +315,10 @@ func TestRace(t *testing.T) {
 		cb.Reset()
 	})
 	run(wg, func() {
-		cb.Done(context.Background(), errors.New(""))
+		_ = cb.Done(context.Background(), errors.New(""))
 	})
 	run(wg, func() {
-		cb.Do(context.Background(), func() (interface{}, error) {
+		_, _ = cb.Do(context.Background(), func() (interface{}, error) {
 			return nil, nil
 		})
 	})

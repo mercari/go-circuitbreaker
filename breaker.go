@@ -38,10 +38,10 @@ const (
 
 // DefaultOpenBackOff returns defaultly used BackOff.
 func DefaultOpenBackOff() backoff.BackOff {
-	backoff := backoff.NewExponentialBackOff()
-	backoff.MaxElapsedTime = 0
-	backoff.Reset()
-	return backoff
+	_backoff := backoff.NewExponentialBackOff()
+	_backoff.MaxElapsedTime = 0
+	_backoff.Reset()
+	return _backoff
 }
 
 // Counters holds internal counter(s) of CircuitBreaker.
@@ -149,22 +149,22 @@ func MarkAsSuccess(err error) error {
 }
 
 // Options holds CircuitBreaker configuration options.
-type Options struct {
+type options struct {
 	// Clock to be used by CircuitBreaker. If nil, real-time clock is
 	// used.
-	Clock clock.Clock
+	clock clock.Clock
 
 	// Interval is the cyclic time period to reset the internal counters
 	// during state is in StateClosed.
 	//
 	// If zero, DefaultInterval is used. If Interval < 0, No interval will
 	// be triggered.
-	Interval time.Duration
+	interval time.Duration
 
 	// OpenTimeout is the period of StateOpened. After OpenTimeout,
 	// CircuitBreaker's state will be changed to StateHalfOpened. If OpenBackOff
 	// is not nil, OpenTimeout is ignored.
-	OpenTimeout time.Duration
+	openTimeout time.Duration
 
 	// OpenBackOff is a Backoff to determine the period of StateOpened. Every
 	// time the state transitions to StateOpened, OpenBackOff.NextBackOff()
@@ -176,30 +176,30 @@ type Options struct {
 	// NOTE: Please make sure not to set the ExponentialBackOff.MaxElapsedTime >
 	// 0 for OpenBackOff. If so, your CB don't close after your period of the
 	// StateOpened gets longer than the MaxElapsedTime.
-	OpenBackOff backoff.BackOff
+	openBackOff backoff.BackOff
 
 	// HalfOpenMaxSuccesses is max count of successive successes during the state
 	// is in StateHalfOpened. If the state is StateHalfOpened and the successive
 	// successes reaches this threshold, the state of CircuitBreaker changes
 	// into StateClosed. If zero, DefaultHalfOpenMaxSuccesses is used.
-	HalfOpenMaxSuccesses int64
+	halfOpenMaxSuccesses int64
 
 	// ShouldTrips is a function to determine if the CircuitBreaker should
 	// trip. If the state is StateClosed and ShouldTrip returns true,
 	// the state will be changed to StateOpened.
 	// If nil, DefaultTripFunc is used.
-	ShouldTrip TripFunc
+	shouldTrip TripFunc
 
 	// OnStateChange is a function which will be invoked when the state is changed.
-	OnStateChange StateChangeHook
+	onStateChange StateChangeHook
 
 	// FailOnContextCancel controls if CircuitBreaker mark an error when the
 	// passed context.Done() is context.Canceled as a fail.
-	FailOnContextCancel bool
+	failOnContextCancel bool
 
 	// FailOnContextDeadline controls if CircuitBreaker mark an error when the
 	// passed context.Done() is context.DeadlineExceeded as a fail.
-	FailOnContextDeadline bool
+	failOnContextDeadline bool
 }
 
 // CircuitBreaker provides circuit breaker pattern.
@@ -218,51 +218,131 @@ type CircuitBreaker struct {
 	cnt   Counters
 }
 
-// New returns a new CircuitBreaker with *Options. If opts is nil, default
-// configurations are used.
-func New(opts *Options) *CircuitBreaker {
-	if opts == nil {
-		opts = &Options{}
+type fnApplyOptions func(*options)
+
+// BreakerOption interface for applying configuration in the constructor
+type BreakerOption interface {
+	apply(*options)
+}
+
+func (f fnApplyOptions) apply(options *options) {
+	f(options)
+}
+
+// WithTripFunc Set the function for counter
+func WithTripFunc(tripFunc TripFunc) BreakerOption {
+	return fnApplyOptions(func(options *options) {
+		options.shouldTrip = tripFunc
+	})
+}
+
+// WithClock Set the clock
+func WithClock(clock clock.Clock) BreakerOption {
+	return fnApplyOptions(func(options *options) {
+		options.clock = clock
+	})
+}
+
+// WithOpenTimeoutBackOff Set the time backoff
+func WithOpenTimeoutBackOff(backoff backoff.BackOff) BreakerOption {
+	return fnApplyOptions(func(options *options) {
+		options.openBackOff = backoff
+	})
+}
+
+// WithOpenTimeout Set the timeout of the circuit breaker
+func WithOpenTimeout(timeout time.Duration) BreakerOption {
+	return fnApplyOptions(func(options *options) {
+		options.openTimeout = timeout
+	})
+}
+
+// WithHalfOpenMaxSuccesses Set the number of half open successes
+func WithHalfOpenMaxSuccesses(maxSuccesses int64) BreakerOption {
+	return fnApplyOptions(func(options *options) {
+		options.halfOpenMaxSuccesses = maxSuccesses
+	})
+}
+
+// WithCounterResetInterval Set the interval of the circuit breaker, which is the cyclic time period to reset the internal counters
+func WithCounterResetInterval(interval time.Duration) BreakerOption {
+	return fnApplyOptions(func(options *options) {
+		options.interval = interval
+	})
+}
+
+// WithFailOnContextCancel Set if the context should fail on cancel
+func WithFailOnContextCancel(failOnContextCancel bool) BreakerOption {
+	return fnApplyOptions(func(options *options) {
+		options.failOnContextCancel = failOnContextCancel
+	})
+}
+
+// WithFailOnContextDeadline Set if the context should fail on deadline
+func WithFailOnContextDeadline(failOnContextDeadline bool) BreakerOption {
+	return fnApplyOptions(func(options *options) {
+		options.failOnContextDeadline = failOnContextDeadline
+	})
+}
+
+// WithOnStateChangeHookFn set a hook function that trigger if the condition of the StateChangeHook is true
+func WithOnStateChangeHookFn(hookFn StateChangeHook) BreakerOption {
+	return fnApplyOptions(func(options *options) {
+		options.onStateChange = hookFn
+	})
+}
+
+func defaultOptions() *options {
+	return &options{
+		shouldTrip:           DefaultTripFunc,
+		clock:                clock.New(),
+		openBackOff:          DefaultOpenBackOff(),
+		openTimeout:          0,
+		halfOpenMaxSuccesses: DefaultHalfOpenMaxSuccesses,
+		interval:             DefaultInterval,
+	}
+}
+
+// New returns a new CircuitBreaker
+// The constructor will be instanced using the functional options pattern. When creating a new circuit breaker
+// we should pass or left it blank if we want to use its default options.
+// An example of the constructor would be like this:
+//
+// cb := circuitbreaker.New(
+//     circuitbreaker.WithClock(clock.New()),
+//     circuitbreaker.WithFailOnContextCancel(true),
+//     circuitbreaker.WithFailOnContextDeadline(true),
+//     circuitbreaker.WithHalfOpenMaxSuccesses(10),
+//     circuitbreaker.WithOpenBackOff(backoff.NewExponentialBackOff()),
+//     circuitbreaker.WithOpenTimeout(10*time.Second),
+//     circuitbreaker.WithCounterResetInterval(10*time.Second),
+//     circuitbreaker.WithTripByFailureCount(10),
+//     circuitbreaker.WithTripByConsecutiveFailure(10),
+//     circuitbreaker.WithTripByFailureRate(10, 0.9),
+//     circuitbreaker.WithOnStateChangeHookFn(),
+// )
+//
+// The default options are described in the defaultOptions function
+func New(opts ...BreakerOption) *CircuitBreaker {
+	cbOptions := defaultOptions()
+
+	for _, opt := range opts {
+		opt.apply(cbOptions)
 	}
 
-	shouldTrip := opts.ShouldTrip
-	if opts.ShouldTrip == nil {
-		shouldTrip = DefaultTripFunc
-	}
-
-	_clock := opts.Clock
-	if _clock == nil {
-		_clock = clock.New()
-	}
-
-	openBackOff := opts.OpenBackOff
-	if openBackOff == nil {
-		if opts.OpenTimeout > 0 {
-			openBackOff = backoff.NewConstantBackOff(opts.OpenTimeout)
-		} else {
-			openBackOff = DefaultOpenBackOff()
-		}
-	}
-
-	halfOpenMaxSuccesses := opts.HalfOpenMaxSuccesses
-	if halfOpenMaxSuccesses == 0 {
-		halfOpenMaxSuccesses = DefaultHalfOpenMaxSuccesses
-	}
-
-	interval := opts.Interval
-	if interval == 0 {
-		interval = DefaultInterval
+	if cbOptions.openTimeout > 0 {
+		cbOptions.openBackOff = backoff.NewConstantBackOff(cbOptions.openTimeout)
 	}
 
 	cb := &CircuitBreaker{
-		shouldTrip:            shouldTrip,
-		onStateChange:         opts.OnStateChange,
-		clock:                 _clock,
-		interval:              interval,
-		openBackOff:           openBackOff,
-		halfOpenMaxSuccesses:  halfOpenMaxSuccesses,
-		failOnContextCancel:   opts.FailOnContextCancel,
-		failOnContextDeadline: opts.FailOnContextDeadline,
+		shouldTrip:            cbOptions.shouldTrip,
+		onStateChange:         cbOptions.onStateChange,
+		clock:                 cbOptions.clock,
+		interval:              cbOptions.interval,
+		openBackOff:           cbOptions.openBackOff,
+		halfOpenMaxSuccesses:  cbOptions.halfOpenMaxSuccesses,
+		failOnContextCancel:   cbOptions.failOnContextCancel,
+		failOnContextDeadline: cbOptions.failOnContextDeadline,
 	}
 	cb.setState(&stateClosed{})
 	return cb

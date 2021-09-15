@@ -13,12 +13,33 @@ go-circuitbreaker is a Circuit Breaker pattern implementation in Go.
 
 See: [Circuit Breaker pattern \- Cloud Design Patterns \| Microsoft Docs](https://docs.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker)
 
+## Initializing the circuit breaker
+
+This library is using the [functional options pattern](https://github.com/uber-go/guide/blob/master/style.md#functional-options) to instance a new circuit breaker. The functions are the following:
+
+You can use them like the next example:
+
+```go
+cb := circuitbreaker.New(
+    circuitbreaker.WithClock(clock.New()),
+    circuitbreaker.WithFailOnContextCancel(true),
+    circuitbreaker.WithFailOnContextDeadline(true),
+    circuitbreaker.WithHalfOpenMaxSuccesses(10),
+    circuitbreaker.WithOpenBackOff(backoff.NewExponentialBackOff()),
+    circuitbreaker.WithOpenTimeout(10*time.Second),
+    circuitbreaker.WithCounterResetInterval(10*time.Second),
+    circuitbreaker.WithTripByFailureCount(10),
+    circuitbreaker.WithTripByConsecutiveFailure(10),
+    circuitbreaker.WithTripByFailureRate(10, 0.9),
+)
+```
+
 ## Simple Examples with Do.
 
 Wrapping your code block with `Do()` protects your process with Circuit Breaker.
 
 ```go
-var cb = circuitbreaker.New(nil)
+var cb = circuitbreaker.New()
 
 u, err := cb.Do(ctx, func() (interface{}, error) {
   return fetchUserInfo(name)
@@ -31,7 +52,7 @@ user, _ := u.(*User) // Casting interface{} into *User safely.
 The following example using Ready() and Done() is exactly equals to the above one. Since this style enables you to protect your processes without wrapping it and using type-unsafe interface{}, it would make it easy to implement CB to your existing logic.
 
 ```go
-var cb = circuitbreaker.New(nil)
+var cb = circuitbreaker.New()
 
 func getUserInfo(ctx context.Context, name string) (_ *User,err error) {
   if !cb.Ready() {
