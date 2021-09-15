@@ -82,18 +82,18 @@ func TestCircuitBreakerOnStateChange(t *testing.T) {
 	var actualStateChanges []stateChange
 
 	clock := clock.NewMock()
-	cb := circuitbreaker.New(&circuitbreaker.Options{
-		ShouldTrip:           circuitbreaker.NewTripFuncThreshold(3),
-		Clock:                clock,
-		OpenTimeout:          1000 * time.Millisecond,
-		HalfOpenMaxSuccesses: 4,
-		OnStateChange: func(from, to circuitbreaker.State) {
+	cb := circuitbreaker.New(
+		circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
+		circuitbreaker.WithClock(clock),
+		circuitbreaker.WithOpenTimeout(1000*time.Millisecond),
+		circuitbreaker.WithHalfOpenMaxSuccesses(4),
+		circuitbreaker.WithOnStateChangeHookFn(func(from, to circuitbreaker.State) {
 			actualStateChanges = append(actualStateChanges, stateChange{
 				from: from,
 				to:   to,
 			})
-		},
-	})
+		}),
+	)
 
 	// Scenario: 3 Fails. State changes to -> StateOpen.
 	cb.Fail()
@@ -302,11 +302,11 @@ func run(wg *sync.WaitGroup, f func()) {
 
 func TestRace(t *testing.T) {
 	clock := clock.NewMock()
-	cb := circuitbreaker.New(&circuitbreaker.Options{
-		ShouldTrip: func(_ *circuitbreaker.Counters) bool { return true },
-		Clock:      clock,
-		Interval:   1000 * time.Millisecond,
-	})
+	cb := circuitbreaker.New(
+		circuitbreaker.WithTripFunc(func(_ *circuitbreaker.Counters) bool { return true }),
+		circuitbreaker.WithClock(clock),
+		circuitbreaker.WithCounterResetInterval(1000*time.Millisecond),
+	)
 	wg := &sync.WaitGroup{}
 	run(wg, func() {
 		cb.SetState(circuitbreaker.StateClosed)

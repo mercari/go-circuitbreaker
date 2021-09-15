@@ -191,7 +191,7 @@ type options struct {
 	shouldTrip TripFunc
 
 	// OnStateChange is a function which will be invoked when the state is changed.
-	OnStateChange StateChangeHook
+	onStateChange StateChangeHook
 
 	// FailOnContextCancel controls if CircuitBreaker mark an error when the
 	// passed context.Done() is context.Canceled as a fail.
@@ -220,7 +220,7 @@ type CircuitBreaker struct {
 
 type fnApplyOptions func(*options)
 
-// Breaker option interface for applying configuration in the constructor
+// BreakerOption interface for applying configuration in the constructor
 type BreakerOption interface {
 	apply(*options)
 }
@@ -229,59 +229,66 @@ func (f fnApplyOptions) apply(options *options) {
 	f(options)
 }
 
-// Set the function for counter
+// WithTripFunc Set the function for counter
 func WithTripFunc(tripFunc TripFunc) BreakerOption {
 	return fnApplyOptions(func(options *options) {
 		options.shouldTrip = tripFunc
 	})
 }
 
-// Set the clock
+// WithClock Set the clock
 func WithClock(clock clock.Clock) BreakerOption {
 	return fnApplyOptions(func(options *options) {
 		options.clock = clock
 	})
 }
 
-// Set the time backoff
+// WithOpenTimeoutBackOff Set the time backoff
 func WithOpenTimeoutBackOff(backoff backoff.BackOff) BreakerOption {
 	return fnApplyOptions(func(options *options) {
 		options.openBackOff = backoff
 	})
 }
 
-// Set the timeout of the circuit breaker
+// WithOpenTimeout Set the timeout of the circuit breaker
 func WithOpenTimeout(timeout time.Duration) BreakerOption {
 	return fnApplyOptions(func(options *options) {
 		options.openTimeout = timeout
 	})
 }
 
-// Set the number of half open successes
+// WithHalfOpenMaxSuccesses Set the number of half open successes
 func WithHalfOpenMaxSuccesses(maxSuccesses int64) BreakerOption {
 	return fnApplyOptions(func(options *options) {
 		options.halfOpenMaxSuccesses = maxSuccesses
 	})
 }
 
-// Set the interval of the circuit breaker, which is the cyclic time period to reset the internal counters
+// WithCounterResetInterval Set the interval of the circuit breaker, which is the cyclic time period to reset the internal counters
 func WithCounterResetInterval(interval time.Duration) BreakerOption {
 	return fnApplyOptions(func(options *options) {
 		options.interval = interval
 	})
 }
 
-// Set if the context should fail on cancel
+// WithFailOnContextCancel Set if the context should fail on cancel
 func WithFailOnContextCancel(failOnContextCancel bool) BreakerOption {
 	return fnApplyOptions(func(options *options) {
 		options.failOnContextCancel = failOnContextCancel
 	})
 }
 
-// Set if the context should fail on deadline
+// WithFailOnContextDeadline Set if the context should fail on deadline
 func WithFailOnContextDeadline(failOnContextDeadline bool) BreakerOption {
 	return fnApplyOptions(func(options *options) {
 		options.failOnContextDeadline = failOnContextDeadline
+	})
+}
+
+// WithOnStateChangeHookFn set a hook function that trigger if the condition of the StateChangeHook is true
+func WithOnStateChangeHookFn(hookFn StateChangeHook) BreakerOption {
+	return fnApplyOptions(func(options *options) {
+		options.onStateChange = hookFn
 	})
 }
 
@@ -312,6 +319,7 @@ func defaultOptions() *options {
 //     circuitbreaker.WithTripByFailureCount(10),
 //     circuitbreaker.WithTripByConsecutiveFailure(10),
 //     circuitbreaker.WithTripByFailureRate(10, 0.9),
+//     circuitbreaker.WithOnStateChangeHookFn(),
 // )
 //
 // The default options are described in the defaultOptions function
@@ -328,7 +336,7 @@ func New(opts ...BreakerOption) *CircuitBreaker {
 
 	cb := &CircuitBreaker{
 		shouldTrip:            cbOptions.shouldTrip,
-		onStateChange:         cbOptions.OnStateChange,
+		onStateChange:         cbOptions.onStateChange,
 		clock:                 cbOptions.clock,
 		interval:              cbOptions.interval,
 		openBackOff:           cbOptions.openBackOff,
