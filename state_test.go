@@ -315,10 +315,10 @@ func TestRace(t *testing.T) {
 		cb.Reset()
 	})
 	run(wg, func() {
-		cb.Done(context.Background(), errors.New(""))
+		_ = cb.Done(context.Background(), errors.New(""))
 	})
 	run(wg, func() {
-		cb.Do(context.Background(), func() (interface{}, error) {
+		_, _ = cb.Do(context.Background(), func() (interface{}, error) {
 			return nil, nil
 		})
 	})
