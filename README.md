@@ -1,7 +1,8 @@
 # go-circuitbreaker
 
 [![GoDoc](https://godoc.org/github.com/mercari/go-circuitbreaker?status.svg)](https://godoc.org/github.com/mercari/go-circuitbreaker)
-[![CircleCI](https://circleci.com/gh/mercari/go-circuitbreaker.svg?style=svg)](https://circleci.com/gh/mercari/go-circuitbreaker)
+![lint](https://github.com/mercari/go-circuitbreaker/actions/workflows/lint.yml/badge.svg)
+![unittests](https://github.com/mercari/go-circuitbreaker/actions/workflows/unit_tests.yml/badge.svg)
 
 go-circuitbreaker is a Circuit Breaker pattern implementation in Go.
 
