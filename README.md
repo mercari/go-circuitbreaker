@@ -26,12 +26,14 @@ cb := circuitbreaker.New(
     circuitbreaker.WithFailOnContextCancel(true),
     circuitbreaker.WithFailOnContextDeadline(true),
     circuitbreaker.WithHalfOpenMaxSuccesses(10),
-    circuitbreaker.WithOpenBackOff(backoff.NewExponentialBackOff()),
+    circuitbreaker.WithOpenTimeoutBackOff(backoff.NewExponentialBackOff()),
     circuitbreaker.WithOpenTimeout(10*time.Second),
     circuitbreaker.WithCounterResetInterval(10*time.Second),
-    circuitbreaker.WithTripByFailureCount(10),
-    circuitbreaker.WithTripByConsecutiveFailure(10),
-    circuitbreaker.WithTripByFailureRate(10, 0.9),
+    // we also have NewTripFuncThreshold and NewTripFuncConsecutiveFailures
+    circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncFailureRate(10, 0.4)),
+    circuitbreaker.WithOnStateChangeHookFn(func(from, to circuitbreaker.State) {
+      log.Printf("state changed from %s to %s\n", from, to)
+    }),
 )
 ```
 
