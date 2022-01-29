@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	backoff "github.com/cenkalti/backoff/v3"
-	"github.com/facebookgo/clock"
 )
 
 var (
