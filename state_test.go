@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/cenkalti/backoff/v3"
-	"github.com/facebookgo/clock"
 	"github.com/mercari/go-circuitbreaker"
 	"github.com/stretchr/testify/assert"
 )

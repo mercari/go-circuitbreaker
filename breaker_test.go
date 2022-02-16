@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/facebookgo/clock"
+	"github.com/benbjohnson/clock"
 	"github.com/mercari/go-circuitbreaker"
 	"github.com/stretchr/testify/assert"
 )

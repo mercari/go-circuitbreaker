@@ -1,8 +1,8 @@
 package circuitbreaker
 
 import (
+	"github.com/benbjohnson/clock"
 	"github.com/cenkalti/backoff/v3"
-	"github.com/facebookgo/clock"
 )
 
 // each implementations of state represents State of circuit breaker.
