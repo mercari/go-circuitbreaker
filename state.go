@@ -2,7 +2,7 @@ package circuitbreaker
 
 import (
 	"github.com/benbjohnson/clock"
-	"github.com/cenkalti/backoff/v3"
+	"github.com/cenkalti/backoff/v4"
 )
 
 // each implementations of state represents State of circuit breaker.
